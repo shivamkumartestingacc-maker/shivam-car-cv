@@ -4,7 +4,7 @@ import { loadCar } from './car.js';
 import { createBillboards } from './billboards.js';
 import { caseStudies } from './content.js';
 import { loadDeck, openDeck } from './deck.js';
-import { createSky, createTrees } from './scenery.js';
+import { createSky, createTrees, createPetals, createBenches } from './scenery.js';
 
 // ---- Choreography knobs. Car, camera and scene are tuned independently here. ----
 const CFG = {
@@ -70,7 +70,7 @@ poles.castShadow = true;
 // Instances are re-laid every frame around the car, so skip culling (their bounds are computed once and go stale).
 dashes.frustumCulled = edges.frustumCulled = poles.frustumCulled = false;
 scene.add(dashes, edges, poles);
-const sky = createSky(scene), trees = createTrees(scene);
+const sky = createSky(scene), trees = createTrees(scene), petals = createPetals(scene), benches = createBenches(scene);
 let boards = null, decks = [];
 const decksReady = Promise.all(caseStudies.map((id) => loadDeck(id).catch((e) => console.warn(e))))
   .then((list) => { decks = list.filter(Boolean); boards = createBillboards(scene, decks); });
@@ -123,6 +123,7 @@ function pose(t, carZ) {
   layoutRoad(carZ);
   boards?.update(carZ);
   trees.update(carZ);
+  benches.update(carZ);
   sky.update(camera);
 
   const lp = span(t, 0, CFG.loader.end);
@@ -226,6 +227,7 @@ renderer.setAnimationLoop((now) => {
   if (debug && playing) scrub.value = t / CFG.duration;
   hint.classList.toggle('on', playing && t >= CFG.duration && !deckOpen);
   pose(t, CFG.speed * t + drive.z);
+  petals.update(dt, CFG.speed * t + drive.z);
   renderer.render(scene, camera);
 });
 
