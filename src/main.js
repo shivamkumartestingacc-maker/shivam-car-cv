@@ -6,7 +6,7 @@ import { loadCar } from './car.js';
 const CFG = {
   duration: 5.0,            // total intro length (s)
   speed: 14,                // car speed (m/s), constant the whole time
-  enter: { end: 2.4, lead: 10 }, // stage 1: camera starts `lead` m ahead (car off-screen left), eases into tracking
+  enter: { lead: 10 },           // stage 1: camera starts `lead` m ahead (car off-screen left) at rest, then ramps to car speed
   orbit: {                  // stage 2: camera swings from side to rear around the car
     start: 2.0, end: 4.2,
     snap: 4,                // easing power: 2 = soft, 4+ = quick middle, firm settle
@@ -95,8 +95,10 @@ function pose(t) {
   car.position.z = carZ;
   for (const w of wheels) w.rotation.x = -carZ / radius;
 
-  const e = 1 - (1 - span(t, 0, CFG.enter.end)) ** 2;   // ease-out: static camera -> tracking
-  const ld = CFG.enter.lead * (1 - e);
+  // camera velocity ramps 0 -> car speed with a smootherstep, never moving backwards. The ramp time is chosen so
+  // the lead is used up exactly when speeds match: Tr = 2 * lead / speed. (x^6 - 3x^5 + 2.5x^4 = integral of smootherstep)
+  const { lead } = CFG.enter, Tr = (2 * lead) / CFG.speed, x = Math.min(t / Tr, 1);
+  const ld = lead - CFG.speed * (t - Tr * (x ** 6 - 3 * x ** 5 + 2.5 * x ** 4) - Math.max(0, t - Tr));
   const o = inOut(span(t, CFG.orbit.start, CFG.orbit.end), CFG.orbit.snap);
   const th = THREE.MathUtils.degToRad(lerp(CFG.orbit.fromDeg, CFG.orbit.toDeg, o));
   const R = lerp(CFG.orbit.fromR, CFG.orbit.toR, o);
@@ -151,5 +153,5 @@ renderer.setAnimationLoop((now) => {
 });
 
 // Preload first; the intro clock starts only once assets are ready.
-loaded.then(() => { renderer.compile(scene, camera); replay(); });
-window.__intro = { CFG, seek: (s) => { playing = false; t = s; }, replay };
+loaded.then(() => { renderer.compile(scene, camera); renderer.render(scene, camera); replay(); }); // warm shaders + shadow map first
+window.__intro = { CFG, get cam() { return +camera.position.z.toFixed(2); }, seek: (s) => { playing = false; t = s; }, replay };
