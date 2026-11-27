@@ -3,11 +3,13 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { loadCar } from './car.js';
 import { createBillboards } from './billboards.js';
 import { caseStudies } from './content.js';
+import { loadDeck, openDeck } from './deck.js';
 
 // ---- Choreography knobs. Car, camera and scene are tuned independently here. ----
 const CFG = {
   duration: 5.6,            // total intro length (s)
-  speed: 14,                // car speed (m/s), constant the whole time
+  speed: 14,                // car speed during the intro (m/s); it keeps cruising at this after
+  drive: { max: 26, reverse: 8, accel: 10, brake: 18 }, // after the intro: arrows/WASD drive, Space stops
   enter: { lead: 10 },           // stage 1: camera starts `lead` m ahead (car off-screen left) at rest, then ramps to car speed
   orbit: {                  // stage 2: camera swings from side to rear around the car
     start: 1.8, end: 5.0,   // smootherstep over this span: gentle start, gentle settle
@@ -67,7 +69,9 @@ poles.castShadow = true;
 // Instances are re-laid every frame around the car, so skip culling (their bounds are computed once and go stale).
 dashes.frustumCulled = edges.frustumCulled = poles.frustumCulled = false;
 scene.add(dashes, edges, poles);
-const boards = createBillboards(scene, caseStudies);
+let boards = null, decks = [];
+const decksReady = Promise.all(caseStudies.map((id) => loadDeck(id).catch((e) => console.warn(e))))
+  .then((list) => { decks = list.filter(Boolean); boards = createBillboards(scene, decks); });
 
 const m = new THREE.Matrix4(), q = new THREE.Quaternion(), flat = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
 const one = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
@@ -88,15 +92,17 @@ function layoutRoad(z) {
 // ---- Car (black, badges removed, SHIVAM plate: see car.js) ----
 const car = new THREE.Group();
 scene.add(car);
-let wheels = [], radius = 0.34;
-const loaded = loadCar({ url: window.INTRO_MODEL }).then((c) => { car.add(c.group); wheels = c.wheels; radius = c.radius; });
+let carApi = null;
+const loaded = loadCar({ url: window.INTRO_MODEL }).then((c) => { car.add(c.group); carApi = c; });
 
 // ---- Timeline: everything derived from t, so it can be scrubbed and replayed ----
 const cam = new THREE.Vector3(), aim = new THREE.Vector3();
-function pose(t) {
-  const carZ = CFG.speed * t;
+function pose(t, carZ) {
   car.position.z = carZ;
-  for (const w of wheels) w.rotation.x = -carZ / radius;
+  if (carApi) {
+    for (const w of carApi.wheels) w.rotation.x = -carZ / carApi.radius;
+    carApi.setBrake(drive.brake);
+  }
 
   // camera velocity ramps 0 -> car speed with a smootherstep, never moving backwards. The ramp time is chosen so
   // the lead is used up exactly when speeds match: Tr = 2 * lead / speed. (x^6 - 3x^5 + 2.5x^4 = integral of smootherstep)
@@ -113,7 +119,7 @@ function pose(t) {
   sun.position.set(-6, 12, carZ + 4);
   sun.target.position.set(0, 0, carZ);
   layoutRoad(carZ);
-  boards.update(carZ);
+  boards?.update(carZ);
 
   const lp = span(t, 0, CFG.loader.end);
   pct.textContent = `Loading ${Math.round(lp * 100)}%`;
@@ -138,33 +144,85 @@ function resize() {
 addEventListener('resize', resize);
 resize();
 
-const replay = () => { t = 0; playing = true; };
-document.getElementById('replay').onclick = replay;
-addEventListener('keydown', (e) => e.key.toLowerCase() === 'r' && replay());
-if (debug) {
-  scrub.style.display = 'block';
-  scrub.oninput = () => { playing = false; t = scrub.value * CFG.duration; };
+// ---- Driving after the intro: Up/Right/W/D forward, Down/Left/S/A back, Space stops (to read a billboard) ----
+const drive = { z: 0, v: CFG.speed, stopped: false, brake: 0 };
+const held = new Set();
+const FWD = ['ArrowUp', 'ArrowRight', 'w', 'd'], BACK = ['ArrowDown', 'ArrowLeft', 's', 'a'];
+const keyOf = (e) => (e.key.length === 1 ? e.key.toLowerCase() : e.key);
+let deckOpen = false;
+
+addEventListener('keydown', (e) => {
+  const k = keyOf(e);
+  if (k === 'r' && !deckOpen) return replay();
+  if (FWD.includes(k) || BACK.includes(k)) { held.add(k); drive.stopped = false; }
+  else if (k === ' ') drive.stopped = true;
+  else return;
+  e.preventDefault(); // arrows/space must not scroll the page
+});
+addEventListener('keyup', (e) => held.delete(keyOf(e)));
+addEventListener('blur', () => held.clear());
+
+function driveStep(dt) {
+  const { max, reverse, accel, brake } = CFG.drive;
+  const fwd = FWD.some((k) => held.has(k)), back = BACK.some((k) => held.has(k));
+  // no key held = cruise control: keep the current speed
+  const target = drive.stopped || deckOpen ? 0 : fwd ? max : back ? -reverse : drive.v;
+  const slowing = Math.abs(target) < Math.abs(drive.v);
+  const step = (slowing ? brake : accel) * dt;
+  drive.v += Math.max(-step, Math.min(step, target - drive.v));
+  drive.z += drive.v * dt; // distance driven since the intro ended (intro clock is frozen at its end)
+  drive.brake += ((slowing && Math.abs(drive.v) > 0.05) || drive.stopped ? 1 - drive.brake : -drive.brake) * Math.min(1, dt * 8);
 }
 
-// Click a billboard -> `portfolio:open` with its case-study id (the overlay deck hooks in here).
+const replay = () => { t = 0; playing = true; Object.assign(drive, { z: 0, v: CFG.speed, stopped: false, brake: 0 }); held.clear(); };
+document.getElementById('replay').onclick = replay;
+if (debug) {
+  scrub.style.display = 'block';
+  scrub.oninput = () => { playing = false; t = scrub.value * CFG.duration; drive.z = 0; };
+}
+
+// ---- Billboards: hover shows a pointer, click opens that case study's deck (and stops the car) ----
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
-renderer.domElement.addEventListener('click', (e) => {
+const boardAt = (e) => {
   ndc.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
-  const id = ray.intersectObjects(boards.panels)[0]?.object.userData.id;
-  if (id) dispatchEvent(new CustomEvent('portfolio:open', { detail: { id } }));
+  return ray.intersectObjects(boards?.panels ?? [])[0]?.object.userData.id;
+};
+renderer.domElement.addEventListener('pointermove', (e) => { renderer.domElement.style.cursor = boardAt(e) ? 'pointer' : ''; });
+renderer.domElement.addEventListener('click', (e) => {
+  const deck = decks.find((d) => d.id === boardAt(e));
+  if (!deck || deckOpen) return;
+  deckOpen = true;
+  openDeck(deck, () => { deckOpen = false; });
 });
 
-pose(0);
+const hint = document.getElementById('hint');
+pose(0, 0);
 renderer.setAnimationLoop((now) => {
   const dt = Math.min((now - last) / 1000, 0.05);
   last = now;
-  if (playing) t += dt;
-  if (debug && playing) scrub.value = Math.min(1, t / CFG.duration);
-  pose(t);
+  if (playing) {
+    if (t < CFG.duration) t = Math.min(CFG.duration, t + dt); // intro clock stops at the end; driving takes over
+    else driveStep(dt);
+  }
+  if (debug && playing) scrub.value = t / CFG.duration;
+  hint.classList.toggle('on', playing && t >= CFG.duration && !deckOpen);
+  pose(t, CFG.speed * t + drive.z);
   renderer.render(scene, camera);
 });
 
-// Preload first; the intro clock starts only once assets are ready.
-loaded.then(() => { renderer.compile(scene, camera); renderer.render(scene, camera); replay(); }); // warm shaders + shadow map first
-window.__intro = { CFG, get cam() { return +camera.position.z.toFixed(2); }, seek: (s) => { playing = false; t = s; }, replay };
+// Preload car + case-study decks; the intro clock starts only once assets are ready.
+Promise.all([loaded, decksReady]).then(() => { renderer.compile(scene, camera); renderer.render(scene, camera); replay(); }); // warm shaders + shadow map first
+window.__intro = { CFG, get t() { return t; }, get v() { return drive.v; },
+  boardScreen() { // debug/test helper: screen position of the nearest billboard ahead
+    const v = new THREE.Vector3();
+    const byZ = (boards?.panels ?? []).map((p) => [p, p.getWorldPosition(new THREE.Vector3()).z]).sort((a, b) => a[1] - b[1]);
+    for (const [p] of byZ) {
+      p.getWorldPosition(v);
+      if (v.z < camera.position.z + 5) continue;
+      v.project(camera);
+      if (Math.abs(v.x) < 0.95 && Math.abs(v.y) < 0.95) return { x: (v.x + 1) / 2 * innerWidth, y: (1 - v.y) / 2 * innerHeight };
+    }
+    return null;
+  },
+  get cam() { return +camera.position.z.toFixed(2); }, seek: (s) => { playing = false; t = s; drive.z = 0; }, replay };

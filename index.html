@@ -12,10 +12,44 @@
     #loader .fill { height: 100%; width: 0; background: #222; }
     #replay { position: fixed; right: 20px; bottom: 20px; background: none; border: 1px solid #0003; color: #333; padding: 6px 12px; font: inherit; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
     #scrub { position: fixed; left: 20px; right: 140px; bottom: 24px; display: none; }
+    #hint { position: fixed; left: 20px; bottom: 22px; color: #555; font-size: 12px; opacity: 0; transition: opacity .6s; pointer-events: none; }
+    #hint.on { opacity: 1; }
+    #hint kbd { font: inherit; padding: 1px 6px; border: 1px solid #0003; border-radius: 4px; }
+
+    /* ---- Case-study deck overlay ---- */
+    .deck { position: fixed; inset: 0; z-index: 10; background: #0f0f10; color: #f2f0ec; opacity: 0; transition: opacity .4s; overflow: hidden; }
+    .deck.open { opacity: 1; }
+    .deck header { position: absolute; top: 0; left: 0; right: 0; z-index: 2; display: flex; align-items: center; gap: 20px; padding: 20px 28px; font-size: 13px; }
+    .deck-title { font-weight: 600; }
+    .deck-count { color: #8a8884; font-variant-numeric: tabular-nums; margin-left: auto; }
+    .deck-close { background: none; border: 1px solid #f2f0ec44; color: inherit; border-radius: 6px; padding: 8px 14px; font: inherit; cursor: pointer; }
+    .deck-track { position: absolute; inset: 0; }
+    .slide { position: absolute; inset: 0; display: grid; align-content: center; gap: 48px; padding: 96px max(6vw, 24px) 80px; transition: transform .7s cubic-bezier(.65,0,.25,1); }
+    .slide.has-media { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); align-items: center; }
+    .slide .copy { max-width: 62ch; }
+    .slide h2 { font-size: clamp(32px, 4.6vw, 64px); line-height: 1.04; letter-spacing: -.02em; margin: 0 0 20px; }
+    .slide h3 { font-size: clamp(18px, 1.8vw, 24px); font-weight: 500; color: #b9b6b0; margin: 0 0 16px; }
+    .slide p, .slide li { font-size: clamp(16px, 1.3vw, 19px); line-height: 1.6; color: #d8d5cf; margin: 0 0 14px; }
+    .slide ul { padding-left: 20px; margin: 0 0 14px; }
+    .slide .media { width: 100%; max-height: 72vh; object-fit: contain; border-radius: 10px; background: #1a1a1b; }
+    /* content animates in when its slide arrives */
+    .slide .copy > *, .slide .media { opacity: 0; transform: translateY(18px); transition: opacity .6s, transform .6s cubic-bezier(.2,.8,.2,1); }
+    .slide.on .copy > *, .slide.on .media { opacity: 1; transform: none; }
+    .slide.on .copy > :nth-child(1) { transition-delay: .25s; } .slide.on .copy > :nth-child(2) { transition-delay: .35s; }
+    .slide.on .copy > :nth-child(3) { transition-delay: .45s; } .slide.on .copy > :nth-child(n+4) { transition-delay: .55s; }
+    .slide.on .media { transition-delay: .4s; }
+    .deck-nav { position: absolute; bottom: 24px; z-index: 2; width: 44px; height: 44px; border-radius: 50%; border: 1px solid #f2f0ec44; background: none; color: inherit; font-size: 18px; cursor: pointer; }
+    .deck-prev { right: 84px; } .deck-next { right: 28px; }
+    .deck-close:hover, .deck-nav:hover { background: #f2f0ec14; }
+    .deck-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #f2f0ec14; }
+    .deck-progress i { display: block; height: 100%; width: 0; background: #e1312b; transition: width .5s; }
+    @media (max-width: 760px) { .slide.has-media { grid-template-columns: 1fr; gap: 24px; } }
+    @media (prefers-reduced-motion: reduce) { .slide, .slide .copy > *, .slide .media { transition: none; } }
   </style>
 </head>
 <body>
   <div id="loader"><span id="pct">Loading</span><div class="bar"><div class="fill" id="fill"></div></div></div>
+  <div id="hint"><kbd>&uarr;</kbd><kbd>W</kbd> forward &nbsp; <kbd>&darr;</kbd><kbd>S</kbd> back &nbsp; <kbd>Space</kbd> stop &nbsp; click a billboard to open it</div>
   <button id="replay" title="Replay (R)">Replay</button>
   <input id="scrub" type="range" min="0" max="1" step="0.001" value="0" />
   <script type="module" src="/src/main.js"></script>
