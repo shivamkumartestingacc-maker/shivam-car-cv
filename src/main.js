@@ -1,20 +1,21 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { loadCar } from './car.js';
+import { createBillboards } from './billboards.js';
+import { caseStudies } from './content.js';
 
 // ---- Choreography knobs. Car, camera and scene are tuned independently here. ----
 const CFG = {
-  duration: 5.0,            // total intro length (s)
+  duration: 5.6,            // total intro length (s)
   speed: 14,                // car speed (m/s), constant the whole time
   enter: { lead: 10 },           // stage 1: camera starts `lead` m ahead (car off-screen left) at rest, then ramps to car speed
   orbit: {                  // stage 2: camera swings from side to rear around the car
-    start: 2.0, end: 4.2,
-    snap: 4,                // easing power: 2 = soft, 4+ = quick middle, firm settle
+    start: 1.8, end: 5.0,   // smootherstep over this span: gentle start, gentle settle
     fromDeg: 0, toDeg: 90,  // 0 = side view (car moves left -> right), 90 = directly behind
     fromR: 8.5, toR: 8,     // distance from car
     fromH: 1.0, toH: 2.4,   // camera height
   },
-  look: { height: 0.6, fromAhead: 0, toAhead: 14, start: 3.0, end: 4.8 }, // aim pushes ahead to reveal the road, once camera is mostly behind
+  look: { height: 0.6, fromAhead: 0, toAhead: 14, start: 3.2, end: 5.4 }, // aim pushes ahead to reveal the road, once camera is mostly behind
   loader: { end: 2.4 },     // loading % runs over this span, then fades
   fov: 35,
   colors: { bg: 0xecebe8, ground: 0xe4e2de, road: 0x9a9a98, paint: 0xffffff },
@@ -22,7 +23,6 @@ const CFG = {
 
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const smoother = (x) => x * x * x * (x * (x * 6 - 15) + 10);
-const inOut = (x, k) => (x < 0.5 ? (2 * x) ** k / 2 : 1 - (2 - 2 * x) ** k / 2);
 const span = (t, a, b) => clamp01((t - a) / (b - a));
 const lerp = THREE.MathUtils.lerp;
 
@@ -64,7 +64,13 @@ const edges = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.12, EDGE), paint
 const POLE = 24, POLES = 16;  // sparse roadside posts, outside the camera's orbit radius: depth cue + future billboard spots
 const poles = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.05, 0.05, 2.4, 6), new THREE.MeshStandardMaterial({ color: 0x8c8c8c }), POLES * 2);
 poles.castShadow = true;
-scene.add(dashes, edges, poles);
+// Dark zebra crossings painted across the road at intervals.
+const CROSS = 110, CROSSINGS = 4, BARS = 8;
+const zebra = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.55, 3.2), new THREE.MeshBasicMaterial({ color: 0x3a3a3a }), CROSSINGS * BARS);
+// Instances are re-laid every frame around the car, so skip culling (their bounds are computed once and go stale).
+dashes.frustumCulled = edges.frustumCulled = poles.frustumCulled = zebra.frustumCulled = false;
+scene.add(dashes, edges, poles, zebra);
+const boards = createBillboards(scene, caseStudies);
 
 const m = new THREE.Matrix4(), q = new THREE.Quaternion(), flat = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
 const one = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
@@ -79,7 +85,10 @@ function layoutRoad(z) {
   b = base(POLE);
   for (let i = 0; i < POLES; i++) for (const s of [0, 1])
     poles.setMatrixAt(i * 2 + s, m.compose(p.set(s ? 10 : -10, 1.2, b + i * POLE), q, one));
-  dashes.instanceMatrix.needsUpdate = edges.instanceMatrix.needsUpdate = poles.instanceMatrix.needsUpdate = true;
+  b = Math.floor(z / CROSS) * CROSS; // nearest crossing behind the car, then the next ones ahead
+  for (let i = 0; i < CROSSINGS; i++) for (let k = 0; k < BARS; k++)
+    zebra.setMatrixAt(i * BARS + k, m.compose(p.set(-3.5 + k, 0.011, b + i * CROSS), flat, one));
+  dashes.instanceMatrix.needsUpdate = edges.instanceMatrix.needsUpdate = poles.instanceMatrix.needsUpdate = zebra.instanceMatrix.needsUpdate = true;
 }
 
 // ---- Car (black, badges removed, SHIVAM plate: see car.js) ----
@@ -99,7 +108,7 @@ function pose(t) {
   // the lead is used up exactly when speeds match: Tr = 2 * lead / speed. (x^6 - 3x^5 + 2.5x^4 = integral of smootherstep)
   const { lead } = CFG.enter, Tr = (2 * lead) / CFG.speed, x = Math.min(t / Tr, 1);
   const ld = lead - CFG.speed * (t - Tr * (x ** 6 - 3 * x ** 5 + 2.5 * x ** 4) - Math.max(0, t - Tr));
-  const o = inOut(span(t, CFG.orbit.start, CFG.orbit.end), CFG.orbit.snap);
+  const o = smoother(span(t, CFG.orbit.start, CFG.orbit.end));
   const th = THREE.MathUtils.degToRad(lerp(CFG.orbit.fromDeg, CFG.orbit.toDeg, o));
   const R = lerp(CFG.orbit.fromR, CFG.orbit.toR, o);
   cam.set(-R * Math.cos(th), lerp(CFG.orbit.fromH, CFG.orbit.toH, o), carZ + ld - R * Math.sin(th));
@@ -110,6 +119,7 @@ function pose(t) {
   sun.position.set(-6, 12, carZ + 4);
   sun.target.position.set(0, 0, carZ);
   layoutRoad(carZ);
+  boards.update(carZ);
 
   const lp = span(t, 0, CFG.loader.end);
   pct.textContent = `Loading ${Math.round(lp * 100)}%`;
@@ -141,6 +151,15 @@ if (debug) {
   scrub.style.display = 'block';
   scrub.oninput = () => { playing = false; t = scrub.value * CFG.duration; };
 }
+
+// Click a billboard -> `portfolio:open` with its case-study id (the overlay deck hooks in here).
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+renderer.domElement.addEventListener('click', (e) => {
+  ndc.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const id = ray.intersectObjects(boards.panels)[0]?.object.userData.id;
+  if (id) dispatchEvent(new CustomEvent('portfolio:open', { detail: { id } }));
+});
 
 pose(0);
 renderer.setAnimationLoop((now) => {

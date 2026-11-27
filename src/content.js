@@ -1,10 +1,10 @@
 // Portfolio content lives here; the scene reads it. (Dock/navigation: to be designed.)
 
-// Case studies become billboards along the road (next iteration).
-// at: metres along the road from where the car stops. side: 'left' | 'right'.
-// slides: the deck shown in the overlay when the billboard is clicked.
+// Case studies = roadside billboards, shown in this order and alternating sides (placeholders while empty).
+// thumb: image on the board (optional). slides: the deck for the overlay opened by clicking the board.
+// Clicking fires window event `portfolio:open` with { id }.
 export const caseStudies = [
-  // { id: 'checkout', title: 'Checkout redesign', thumb: '/work/checkout.jpg', at: 40, side: 'right', slides: [] },
+  // { id: 'checkout', title: 'Checkout redesign', thumb: './work/checkout.jpg', slides: [] },
 ];
 
 // Small vertical sideboards for Motion / Visuals / AI work (next iteration).
