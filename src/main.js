@@ -86,8 +86,13 @@ const car = new THREE.Group();
 scene.add(car);
 const wheels = [];
 
-const draco = new DRACOLoader().setDecoderPath('/draco/');
-const loaded = new GLTFLoader().setDRACOLoader(draco).loadAsync('/models/car.glb').then((gltf) => {
+const gltfLoader = new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath('./draco/'));
+// ponytail: `.json` = base64-wrapped GLB, only because claude.ai artifacts won't serve .glb. Real hosting uses the .glb.
+const modelUrl = window.INTRO_MODEL || './models/car.glb';
+const loadModel = async (url) => url.endsWith('.json')
+  ? gltfLoader.parseAsync(Uint8Array.from(atob((await (await fetch(url)).json()).glb), (c) => c.charCodeAt(0)).buffer, '')
+  : gltfLoader.loadAsync(url);
+const loaded = loadModel(modelUrl).then((gltf) => {
   const model = gltf.scene;
   model.rotation.y = Math.PI;
   model.traverse((o) => {
@@ -131,7 +136,7 @@ function pose(t) {
 // ---- Loop / controls ----
 const loader = document.getElementById('loader'), pct = document.getElementById('pct'), fill = document.getElementById('fill');
 const scrub = document.getElementById('scrub');
-const debug = new URLSearchParams(location.search).has('debug');
+const debug = window.INTRO_DEBUG || new URLSearchParams(location.search).has('debug');
 let t = 0, playing = false, last = 0;
 
 function resize() {
