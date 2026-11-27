@@ -7,7 +7,8 @@ const CFG = {
   duration: 8,                                  // last moving frame; afterwards the scene renders only on demand
   car: { startZ: -22, speed: 8, brakeAt: 5.2, stopAt: 6.8 },
   loading: { end: 2.2 },                        // stripes paint across the screen 0 -> 100% (cinematic, not network time)
-  stripe: { fromZ: -12, toZ: 13, horizonBy: 3.6 }, // paint tip during loading, then it runs off to the horizon
+  stripe: { fromZ: -12, toZ: 13, horizonBy: 3.6,  // paint tip during loading, then it runs off to the horizon
+            redFrom: 3.6, redTo: 4.4 },         // grey while loading; turns red as the car's rear comes into view
   track: { from: 1.6, to: 3.2 },                // camera holds over the floor, then eases into following the car
   orbit: { start: 2.2, end: 5.4, snap: 3,       // snap: 2 = soft, 3-4 = quick middle, firm settle
            fromAz: 35, toAz: 0,                 // azimuth: 35 = stripes run diagonally on screen, 0 = straight behind
@@ -16,7 +17,7 @@ const CFG = {
   push: { r: 0.8, from: 5.4, to: 8 },           // slow push-in once behind the car
   look: { toH: 0.8, ahead: 6, from: 3.4, to: 5.6 },
   lettering: { inTo: 0.5, outFrom: 2.2, outTo: 2.9 }, // LOADING + counter fade in, then fade out as the count finishes
-  colors: { ground: '#4b4c4f', sky: '#e9dfca', red: '#e1312b', gap: '#f7f2e7', ink: '#efe6d2', sun: '#fff1dc', fill: '#a9bccf' },
+  colors: { ground: '#ede4cf', sky: '#e9dfca', grey: '#a9a49a', red: '#e1312b', gap: '#f7f2e7', ink: '#1a1a1a', sun: '#fff1dc', fill: '#a9bccf' },
 };
 
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
@@ -24,6 +25,7 @@ const span = (t, a, b) => clamp01((t - a) / (b - a));
 const smoother = (x) => x * x * x * (x * (x * 6 - 15) + 10);
 const inOut = (x, k) => (x < 0.5 ? (2 * x) ** k / 2 : 1 - (2 - 2 * x) ** k / 2);
 const lerp = THREE.MathUtils.lerp, rad = THREE.MathUtils.degToRad;
+const C = { grey: new THREE.Color(CFG.colors.grey), red: new THREE.Color(CFG.colors.red) };
 
 // ---- Renderer: capped pixel ratio, one shadow map, no post-processing ----
 const coarse = matchMedia('(pointer: coarse)').matches;
@@ -36,7 +38,7 @@ const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(CFG.colors.sky);
-scene.fog = new THREE.FogExp2(CFG.colors.sky, 0.012); // smooth gradient: road melts into the sky colour
+scene.fog = new THREE.Fog(CFG.colors.sky, 30, 170);
 scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
 scene.environmentIntensity = 0.35;
 const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 500);
@@ -62,39 +64,11 @@ const flat = (w, l, mat, x, y) => {
   return m;
 };
 // Floor layers never write depth and draw first (renderOrder), so the stripes can't z-fight the ground.
-// Grunge road: generated in code (no download). Tiled, and offset with the car so it stays fixed to the world.
-const TILE = 12; // metres per texture tile
-function grunge() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 512;
-  const x = c.getContext('2d');
-  x.fillStyle = CFG.colors.ground;
-  x.fillRect(0, 0, 512, 512);
-  let seed = 7;
-  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  for (let i = 0; i < 9000; i++) {
-    const r = rnd() * 2.2 + 0.4;
-    x.fillStyle = rnd() < 0.5 ? `rgba(18,18,20,${0.15 + rnd() * 0.35})` : `rgba(150,150,152,${0.04 + rnd() * 0.1})`;
-    x.fillRect(rnd() * 512, rnd() * 512, r, r);
-  }
-  for (let i = 0; i < 26; i++) {
-    x.strokeStyle = `rgba(25,25,28,${0.08 + rnd() * 0.12})`;
-    x.lineWidth = 0.6 + rnd() * 1.4;
-    const px = rnd() * 512, py = rnd() * 512;
-    x.beginPath(); x.moveTo(px, py); x.lineTo(px + (rnd() - 0.5) * 90, py + (rnd() - 0.5) * 20); x.stroke();
-  }
-  const t = new THREE.CanvasTexture(c);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.repeat.set(900 / TILE, 900 / TILE);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = aniso;
-  return t;
-}
-const ground = flat(900, 900, lambert({ map: grunge(), depthWrite: false }), 0, 0);
+const ground = flat(900, 900, lambert({ color: CFG.colors.ground, depthWrite: false }), 0, 0);
 ground.renderOrder = -2;
 const STRIPE_TAIL = -300;
 const stripeParts = [                               // [width, x, colour] — two red bands, light gap and outer pinstripes
-  [0.95, -0.6, CFG.colors.red], [0.95, 0.6, CFG.colors.red],
+  [0.95, -0.6, CFG.colors.grey], [0.95, 0.6, CFG.colors.grey],
   [0.25, 0, CFG.colors.gap], [0.12, -1.2, CFG.colors.gap], [0.12, 1.2, CFG.colors.gap],
 ].map(([w, x, c]) => { const m = flat(w, 1, lambert({ color: c, depthWrite: false }), x, 0.002); m.renderOrder = -1; return m; });
 function paintTo(tip) {
@@ -178,6 +152,8 @@ function pose(t) {
   const { fromZ, toZ, horizonBy } = CFG.stripe;
   const tip = t <= CFG.loading.end ? lerp(fromZ, toZ, p) : lerp(toZ, 600, span(t, CFG.loading.end, horizonBy) ** 2);
   paintTo(tip);
+  const red = smoother(span(t, CFG.stripe.redFrom, CFG.stripe.redTo));
+  for (const m of stripeParts.slice(0, 2)) m.material.color.copy(C.grey).lerp(C.red, red);
   drawCount(Math.round(p * 100));
   count.m.position.z = Math.min(tip, toZ) - 2.6;   // the counter rides just behind the paint tip
   const { inTo, outFrom, outTo } = CFG.lettering;
@@ -199,7 +175,6 @@ function pose(t) {
   sun.position.set(12, 7, z + 3);  // low sun -> long shadow
   sun.target.position.set(0, 0, z);
   ground.position.z = z;
-  ground.material.map.offset.y = -z / TILE; // keeps the grunge fixed to the road as the car moves
 }
 
 // ---- Loop: renders every frame while things move, then only on demand ----

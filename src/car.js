@@ -44,7 +44,7 @@ function cutBadges(mesh) {
   g.setIndex(keep);
 }
 
-export async function loadCar({ url = './models/car.glb', paint = 0xb0101c, name = 'SHIVAM' } = {}) {
+export async function loadCar({ url = './models/car.glb', paint = 0x101113, name = 'SHIVAM' } = {}) {
   const gltf = await fetchModel(url);
   const model = gltf.scene;
   model.rotation.y = Math.PI; // model faces -z; the scene drives toward +z
