@@ -189,11 +189,25 @@ const boardAt = (e) => {
   return ray.intersectObjects(boards?.panels ?? [])[0]?.object.userData.id;
 };
 renderer.domElement.addEventListener('pointermove', (e) => { renderer.domElement.style.cursor = boardAt(e) ? 'pointer' : ''; });
+// Screen rectangle of a billboard panel (its projected bounding box), for the open/close transition.
+const corner = new THREE.Vector3();
+function screenRect(panel) {
+  const { min, max } = panel.geometry.boundingBox ?? (panel.geometry.computeBoundingBox(), panel.geometry.boundingBox);
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = 0; i < 8; i++) {
+    corner.set(i & 1 ? max.x : min.x, i & 2 ? max.y : min.y, i & 4 ? max.z : min.z).applyMatrix4(panel.matrixWorld).project(camera);
+    if (corner.z > 1) return null; // behind the camera
+    const x = ((corner.x + 1) / 2) * innerWidth, y = ((1 - corner.y) / 2) * innerHeight;
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+  }
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
 renderer.domElement.addEventListener('click', (e) => {
-  const deck = decks.find((d) => d.id === boardAt(e));
+  const id = boardAt(e), deck = decks.find((d) => d.id === id);
   if (!deck || deckOpen) return;
+  const panel = boards.panels.find((p) => p.userData.id === id && ray.intersectObject(p).length);
   deckOpen = true;
-  openDeck(deck, () => { deckOpen = false; });
+  openDeck(deck, () => { deckOpen = false; }, () => screenRect(panel)); // the car brakes to a stop behind the deck
 });
 
 const hint = document.getElementById('hint');

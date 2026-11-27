@@ -17,8 +17,11 @@
     #hint kbd { font: inherit; padding: 1px 6px; border: 1px solid #0003; border-radius: 4px; }
 
     /* ---- Case-study deck overlay ---- */
-    .deck { position: fixed; inset: 0; z-index: 10; background: #0f0f10; color: #f2f0ec; opacity: 0; transition: opacity .4s; overflow: hidden; }
-    .deck.open { opacity: 1; }
+    /* opens by growing out of the clicked billboard (clip-path from its screen rect), content fades in after */
+    .deck { position: fixed; inset: 0; z-index: 10; background: #0f0f10; color: #f2f0ec; overflow: hidden; transition: clip-path .7s cubic-bezier(.7,0,.2,1) .08s, opacity .4s; }
+    .deck.fade { opacity: 0; }
+    .deck > * { opacity: 0; transition: opacity .22s; }
+    .deck.open > * { opacity: 1; transition: opacity .45s .55s; }
     .deck header { position: absolute; top: 0; left: 0; right: 0; z-index: 2; display: flex; align-items: center; gap: 20px; padding: 20px 28px; font-size: 13px; }
     .deck-title { font-weight: 600; }
     .deck-count { color: #8a8884; font-variant-numeric: tabular-nums; margin-left: auto; }
@@ -44,7 +47,7 @@
     .deck-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #f2f0ec14; }
     .deck-progress i { display: block; height: 100%; width: 0; background: #e1312b; transition: width .5s; }
     @media (max-width: 760px) { .slide.has-media { grid-template-columns: 1fr; gap: 24px; } }
-    @media (prefers-reduced-motion: reduce) { .slide, .slide .copy > *, .slide .media { transition: none; } }
+    @media (prefers-reduced-motion: reduce) { .deck, .deck > *, .slide, .slide .copy > *, .slide .media { transition: none; } }
   </style>
 </head>
 <body>

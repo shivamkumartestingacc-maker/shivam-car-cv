@@ -70,7 +70,8 @@ function renderSlide(parts) {
 }
 
 // Full-screen deck overlay. Left/Right (or A/D, swipe, buttons) change slide; Esc or Close exits.
-export function openDeck(deck, onClose) {
+// fromRect(): screen rect of the clicked billboard; the deck grows out of it and shrinks back into it on close.
+export function openDeck(deck, onClose, fromRect = () => null) {
   const root = document.createElement('div');
   root.className = 'deck';
   root.setAttribute('role', 'dialog');
@@ -100,11 +101,13 @@ export function openDeck(deck, onClose) {
     bar.style.width = `${((i + 1) / slides.length) * 100}%`;
   };
 
+  const clip = (r) => (r ? `inset(${r.y}px ${innerWidth - r.x - r.w}px ${innerHeight - r.y - r.h}px ${r.x}px round 6px)` : 'inset(0 round 0)');
   const close = () => {
     removeEventListener('keydown', onKey, true);
     root.classList.remove('open');
-    setTimeout(() => root.remove(), 450);
-    onClose?.();
+    const r = fromRect();
+    if (r) root.style.clipPath = clip(r); else root.classList.add('fade');
+    setTimeout(() => { root.remove(); onClose?.(); }, 800);
   };
   // capture phase + stopImmediatePropagation: while the deck is open, keys never reach the driving controls
   const onKey = (e) => {
@@ -124,8 +127,12 @@ export function openDeck(deck, onClose) {
   root.addEventListener('pointerdown', (e) => { x0 = e.clientX; });
   root.addEventListener('pointerup', (e) => { if (x0 !== null && Math.abs(e.clientX - x0) > 50) go(i + (e.clientX < x0 ? 1 : -1)); x0 = null; });
 
+  const r = fromRect();
+  root.style.clipPath = clip(r);
+  if (!r) root.classList.add('fade');
   document.body.append(root);
   go(0);
-  requestAnimationFrame(() => root.classList.add('open'));
+  root.getBoundingClientRect(); // commit the start state so the expansion animates
+  requestAnimationFrame(() => { root.classList.remove('fade'); root.classList.add('open'); root.style.clipPath = clip(null); });
   root.querySelector('.deck-close').focus();
 }
