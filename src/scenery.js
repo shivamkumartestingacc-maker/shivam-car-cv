@@ -209,18 +209,64 @@ function benchAndLamp() {
   return g;
 }
 
-// One bench + lamp halfway between billboard bridges, every `every` bridges, alternating sides.
-export function createBenches(scene, { start = 120, spacing = 70, every = 2, count = 3 } = {}) {
+// Benches (most with a street lamp) along both sidewalks: roughly every 30 m, irregular, so the park feels natural.
+export function createBenches(scene, { step = 30, count = 10, start = 30 } = {}) {
   const pool = Array.from({ length: count }, () => { const g = benchAndLamp(); scene.add(g); return g; });
-  const gap = spacing * every;
   return {
     update(z) {
-      const first = Math.max(0, Math.floor((z - start - spacing / 2) / gap));
+      const first = Math.max(0, Math.floor((z - start) / step) - 1);
       pool.forEach((g, k) => {
-        const n = first + k, side = n % 2 ? 1 : -1;
-        g.position.set(side * 7.4, 0, start + spacing / 2 + spacing * (every - 1) + n * gap);
+        const n = first + k, side = hash(n * 3.1) < 0.5 ? -1 : 1;
+        g.position.set(side * 7.4, 0, start + n * step + (hash(n * 5.7) - 0.5) * step * 0.6);
         g.rotation.y = -side * Math.PI / 2; // seat faces the road
+        g.children[g.children.length - 1].visible = hash(n * 9.3) < 0.7; // lamp beside ~70% of benches
       });
     },
   };
+}
+
+// ---------- Faint city skyline far out on both sides ----------
+// Layered building silhouettes painted in code; far layers paler. They travel with the car, so they read as distant backdrop.
+const SKYLINE = [ // [distance from road, height, colour, opacity]
+  [170, 50, '#cdd3db', 0.4],
+  [130, 36, '#b9c2cc', 0.45],
+];
+
+function skylineTexture(seed, colour) {
+  const c = document.createElement('canvas');
+  c.width = 2048; c.height = 256;
+  const x = c.getContext('2d'), r = rng(seed);
+  const grad = x.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, colour + '66'); grad.addColorStop(1, colour);   // tops fade into the haze, bases stronger
+  x.fillStyle = grad;
+  let px = 0;
+  while (px < 2048) {
+    const w = 30 + r() * 90, h = 50 + r() * 150 * (r() < 0.15 ? 1.3 : 1);
+    x.fillRect(px, 256 - h, w, h);
+    if (r() < 0.3) x.fillRect(px + w * 0.25, 256 - h - 14 - r() * 18, w * 0.5, 20);       // stepped top
+    if (r() < 0.12) x.fillRect(px + w / 2 - 2, 256 - h - 40 - r() * 30, 4, 60);          // antenna
+    if (r() < 0.06) { x.beginPath(); x.moveTo(px, 256 - h); x.lineTo(px + w / 2, 256 - h - 60); x.lineTo(px + w, 256 - h); x.fill(); } // spire
+    px += w + (r() < 0.25 ? r() * 20 : -r() * 10);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  return t;
+}
+
+export function createSkyline(scene) {
+  const LEN = 700, strips = [];
+  SKYLINE.forEach(([dist, h, colour, opacity], k) => {
+    for (const side of [-1, 1]) {
+      const tex = skylineTexture(7 + k * 31 + (side > 0 ? 3 : 0), colour);
+      tex.repeat.x = 2;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(LEN, h), new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity, depthWrite: false, fog: false }));
+      m.rotation.y = side * -Math.PI / 2;          // face the road
+      m.position.set(side * dist, h / 2 - 2, 0);
+      m.renderOrder = -5 + k;                      // far layer first
+      scene.add(m);
+      strips.push(m);
+    }
+  });
+  return { update: (z) => { for (const m of strips) m.position.z = z + 150; } };
 }

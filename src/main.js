@@ -4,7 +4,7 @@ import { loadCar } from './car.js';
 import { createBillboards } from './billboards.js';
 import { caseStudies } from './content.js';
 import { loadDeck, openDeck } from './deck.js';
-import { createSky, createTrees, createPetals, createBenches } from './scenery.js';
+import { createSky, createTrees, createPetals, createBenches, createSkyline } from './scenery.js';
 
 // ---- Choreography knobs. Car, camera and scene are tuned independently here. ----
 const CFG = {
@@ -67,7 +67,7 @@ const edges = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.12, EDGE), paint
 // Instances are re-laid every frame around the car, so skip culling (their bounds are computed once and go stale).
 dashes.frustumCulled = edges.frustumCulled = false;
 scene.add(dashes, edges);
-const sky = createSky(scene), trees = createTrees(scene), petals = createPetals(scene), benches = createBenches(scene);
+const sky = createSky(scene), trees = createTrees(scene), petals = createPetals(scene), benches = createBenches(scene), skyline = createSkyline(scene);
 let boards = null, decks = [];
 const decksReady = Promise.all(caseStudies.map((id) => loadDeck(id).catch((e) => console.warn(e))))
   .then((list) => { decks = list.filter(Boolean); boards = createBillboards(scene, decks); });
@@ -118,6 +118,7 @@ function pose(t, carZ) {
   boards?.update(carZ);
   trees.update(carZ);
   benches.update(carZ);
+  skyline.update(carZ);
   sky.update(camera);
 
   const lp = span(t, 0, CFG.loader.end);
