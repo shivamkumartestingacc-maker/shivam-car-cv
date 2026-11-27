@@ -1,137 +1,88 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 
-// Code-built luxury SUV (Range Rover-like proportions: 5.0m long, 2.0m wide, 1.9m tall).
-// Front faces +z. A few hundred triangles, no downloads, so it runs on any phone.
-// To swap in a real model later, return the same { group, wheels, setBrake } shape.
+// Loads the placeholder sports car (three.js example Ferrari 458, Draco-compressed, 1.2 MB),
+// restyles it satin black with the badges blacked out, and returns { group, wheels, radius, setBrake }.
+// Any other GLB car works if it has four nodes named wheel_fl / wheel_fr / wheel_rl / wheel_rr.
 
-const WHEELBASE = 1.5;   // axle distance from centre
-const TIRE_R = 0.4;
-const TRACK = 0.86;      // wheel x offset
+const loader = new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath('./draco/'));
 
-const extrude = (pts, width, bevel) => {
-  const s = new THREE.Shape(pts.map(([z, y]) => new THREE.Vector2(z, y)));
-  const g = new THREE.ExtrudeGeometry(s, { depth: width - 2 * bevel, bevelEnabled: true, bevelSize: bevel, bevelThickness: bevel, bevelSegments: 2, curveSegments: 10 });
-  g.rotateY(-Math.PI / 2);                 // shape x -> world z, extrusion -> world -x
-  g.translate((width - 2 * bevel) / 2, 0, 0);
-  return g;
-};
+// ponytail: `.json` = base64-wrapped GLB, only because claude.ai artifacts won't serve .glb. Real hosting uses the .glb.
+const fetchModel = async (url) => url.endsWith('.json')
+  ? loader.parseAsync(Uint8Array.from(atob((await (await fetch(url)).json()).glb), (c) => c.charCodeAt(0)).buffer, '')
+  : loader.loadAsync(url);
 
-function bodyShape() {
-  const s = new THREE.Shape();
-  s.moveTo(-2.45, 0.32);
-  for (const cz of [-WHEELBASE, WHEELBASE]) {   // wheel arches
-    s.lineTo(cz - 0.47, 0.32);
-    s.absarc(cz, TIRE_R, 0.47, Math.PI, 0, true);
-    s.lineTo(cz + 0.47, 0.32);
-  }
-  [[2.40, 0.32], [2.52, 0.50], [2.55, 0.95], [2.50, 1.06], [1.15, 1.16], [-2.35, 1.24], [-2.52, 1.16], [-2.55, 0.55]].forEach(([z, y]) => s.lineTo(z, y));
-  const g = new THREE.ExtrudeGeometry(s, { depth: 1.82, bevelEnabled: true, bevelSize: 0.09, bevelThickness: 0.09, bevelSegments: 3, curveSegments: 10 });
-  g.rotateY(-Math.PI / 2);
-  g.translate(0.91, 0, 0);
-  return g;
-}
-
-function label(text, w, h, color) {
+function plate(text) {
   const c = document.createElement('canvas');
-  c.width = 1024; c.height = Math.round(1024 * h / w);
+  c.width = 512; c.height = 112;
   const x = c.getContext('2d');
-  x.fillStyle = color;
-  x.font = `600 ${c.height * 0.62}px system-ui, sans-serif`;
-  x.textAlign = 'center'; x.textBaseline = 'middle';
-  x.letterSpacing = `${c.height * 0.5}px`;
-  x.fillText(text, c.width / 2 + c.height * 0.25, c.height / 2);
+  x.fillStyle = '#f4f1ea'; x.fillRect(0, 0, 512, 112);
+  x.fillStyle = '#111'; x.font = '700 64px system-ui, sans-serif';
+  x.textAlign = 'center'; x.textBaseline = 'middle'; x.letterSpacing = '14px';
+  x.fillText(text, 263, 60);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 4;
-  return new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false }));
+  return new THREE.Mesh(new THREE.PlaneGeometry(0.52, 0.114), new THREE.MeshStandardMaterial({ map: t, roughness: 0.5 }));
 }
 
-function blob(w, l) {
-  const c = document.createElement('canvas');
-  c.width = c.height = 128;
-  const x = c.getContext('2d');
-  const g = x.createRadialGradient(64, 64, 8, 64, 64, 64);
-  g.addColorStop(0, 'rgba(0,0,0,0.75)');
-  g.addColorStop(1, 'rgba(0,0,0,0)');
-  x.fillStyle = g;
-  x.fillRect(0, 0, 128, 128);
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
-  m.rotation.x = -Math.PI / 2;
-  m.position.y = 0.01;
-  return m;
+// Brand badges are welded into the chrome mesh: drop just the triangles inside these boxes (car space, front = +z).
+const BADGES = [
+  new THREE.Box3(new THREE.Vector3(-0.1, 0.6, -2.4), new THREE.Vector3(0.1, 0.92, -2.0)), // rear horse
+  new THREE.Box3(new THREE.Vector3(-0.1, 0.5, 2.0), new THREE.Vector3(0.1, 0.66, 2.4)),   // nose badge
+];
+function cutBadges(mesh) {
+  const g = mesh.geometry, pos = g.attributes.position, idx = g.index;
+  if (!idx) return;
+  const v = new THREE.Vector3(), c = new THREE.Vector3(), keep = [];
+  for (let i = 0; i < idx.count; i += 3) {
+    c.set(0, 0, 0);
+    for (let k = 0; k < 3; k++) c.add(v.fromBufferAttribute(pos, idx.getX(i + k)).applyMatrix4(mesh.matrixWorld));
+    c.divideScalar(3);
+    if (!BADGES.some((b) => b.containsPoint(c))) keep.push(idx.getX(i), idx.getX(i + 1), idx.getX(i + 2));
+  }
+  g.setIndex(keep);
 }
 
-export function createCar({ paint = 0x0c0c0e, name = 'SHIVAM' } = {}) {
+export async function loadCar({ url = './models/car.glb', paint = 0x101113, name = 'SHIVAM' } = {}) {
+  const gltf = await fetchModel(url);
+  const model = gltf.scene;
+  model.rotation.y = Math.PI; // model faces -z; the scene drives toward +z
+
+  const satin = new THREE.MeshPhysicalMaterial({ color: paint, metalness: 0.25, roughness: 0.48, clearcoat: 0.3, clearcoatRoughness: 0.35 });
+  const blackout = new THREE.MeshStandardMaterial({ color: 0x0b0b0b, metalness: 0.4, roughness: 0.5 });
+  const cabin = new THREE.MeshStandardMaterial({ color: 0x161616, roughness: 0.7 });
+  const gunmetal = new THREE.MeshStandardMaterial({ color: 0x2a2a2c, metalness: 0.8, roughness: 0.4 });
+  const darkChrome = new THREE.MeshStandardMaterial({ color: 0x4a4a4c, metalness: 1, roughness: 0.3 });
+  const swap = { Body_Color: satin, Ferrari_Yellow: blackout, _0098_DodgerBlue: blackout, plastic_gray: blackout, metal_gray: gunmetal, Leather: cabin, Interior_light: cabin, Interior_dark: cabin, Carpet: cabin };
+  let tail;
+  model.updateMatrixWorld(true);
+  model.traverse((o) => {
+    if (!o.isMesh) return;
+    o.castShadow = true;
+    const n = o.material.name;
+    if (swap[n]) o.material = swap[n];
+    else if (n === 'Taillight_Glass') {
+      tail ||= Object.assign(o.material.clone(), { color: new THREE.Color(0x3a0000), emissive: new THREE.Color(0xff1010) });
+      o.material = tail;
+    } else if (n === 'metal_chrome') { cutBadges(o); o.material = darkChrome; }
+  });
+
+  const wheels = ['wheel_fl', 'wheel_fr', 'wheel_rl', 'wheel_rr'].map((n) => model.getObjectByName(n));
+  const radius = new THREE.Box3().setFromObject(wheels[0]).getSize(new THREE.Vector3()).y / 2;
+
   const group = new THREE.Group();
-  const M = {
-    paint: new THREE.MeshPhysicalMaterial({ color: paint, metalness: 0.5, roughness: 0.28, clearcoat: 1, clearcoatRoughness: 0.08 }),
-    glass: new THREE.MeshPhysicalMaterial({ color: 0x040507, metalness: 0.3, roughness: 0.05, envMapIntensity: 1.4 }),
-    trim: new THREE.MeshStandardMaterial({ color: 0x9a9a9a, metalness: 1, roughness: 0.3 }),
-    dark: new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.6 }),
-    tire: new THREE.MeshStandardMaterial({ color: 0x0b0b0b, roughness: 0.9 }),
-    rim: new THREE.MeshStandardMaterial({ color: 0x1c1c1f, metalness: 0.9, roughness: 0.35 }),
-    caliper: new THREE.MeshStandardMaterial({ color: 0xc8102e, roughness: 0.4 }),
-    head: new THREE.MeshBasicMaterial({ color: 0xf4f6ff }),
-    tail: new THREE.MeshStandardMaterial({ color: 0x300000, emissive: 0xff0a0a, emissiveIntensity: 1 }),
-  };
-  const add = (geo, mat, x = 0, y = 0, z = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); group.add(m); return m; };
-
-  const body = add(bodyShape(), M.paint);
-  body.geometry.computeBoundingBox();
-  const { min, max } = body.geometry.boundingBox;
-  const rear = min.z - 0.004, front = max.z + 0.004;
-
-  // greenhouse (glass) + floating roof slab
-  add(extrude([[1.15, 1.16], [0.2, 1.82], [-2.1, 1.85], [-2.33, 1.24]], 1.80, 0.06), M.glass);
-  add(extrude([[0.22, 1.81], [-2.12, 1.84], [-2.14, 1.91], [0.08, 1.88]], 1.84, 0.03), M.paint);
-
-  // beltline trim, mirrors
-  for (const s of [-1, 1]) {
-    add(new THREE.BoxGeometry(0.02, 0.025, 3.45), M.trim, s * 1.0, 1.18, -0.6).rotation.x = 0.023; // beltline rises toward the rear
-    add(new THREE.BoxGeometry(0.1, 0.12, 0.22), M.paint, s * 1.06, 1.3, 0.95);
-  }
-
-  // rear: vertical LED tail lamps, hairline light bar, lettering
-  for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.07, 0.44, 0.03), M.tail, s * 0.9, 0.95, rear);
-  add(new THREE.BoxGeometry(1.7, 0.018, 0.02), M.tail, 0, 1.13, rear);
-  const back = label(name, 0.9, 0.09, '#d9d9d9');
-  back.position.set(0, 1.03, rear - 0.01);
-  back.rotation.y = Math.PI;
-  group.add(back);
-
-  // front: slim LED headlights, dark grille, lettering
-  for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.5, 0.045, 0.02), M.head, s * 0.62, 0.99, front);
-  add(new THREE.BoxGeometry(0.95, 0.26, 0.02), M.dark, 0, 0.8, front);
-  const nose = label(name, 0.7, 0.07, '#d9d9d9');
-  nose.position.set(0, 1.0, front + 0.01);
-  group.add(nose);
-
-  // wheels: tire + rim + spokes spin; caliper stays put
-  const wheels = [];
-  const tireGeo = new THREE.CylinderGeometry(TIRE_R, TIRE_R, 0.27, 28).rotateZ(Math.PI / 2);
-  const rimGeo = new THREE.CylinderGeometry(0.29, 0.29, 0.28, 28).rotateZ(Math.PI / 2);
-  const spokeGeo = new THREE.BoxGeometry(0.02, 0.56, 0.05);
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    const w = new THREE.Group();
-    w.add(new THREE.Mesh(tireGeo, M.tire), new THREE.Mesh(rimGeo, M.rim));
-    for (let k = 0; k < 6; k++) {
-      const sp = new THREE.Mesh(spokeGeo, M.trim);
-      sp.position.x = sx * 0.142;
-      sp.rotation.x = (k * Math.PI) / 6;
-      w.add(sp);
-    }
-    w.position.set(sx * TRACK, TIRE_R, sz * WHEELBASE);
-    group.add(w);
-    wheels.push(w);
-    add(new THREE.BoxGeometry(0.06, 0.16, 0.22), M.caliper, sx * (TRACK - 0.02), TIRE_R + 0.12, sz * WHEELBASE - 0.12);
-  }
-
-  group.add(blob(3.2, 6.4));
+  group.add(model);
+  const box = new THREE.Box3().setFromObject(model);
+  const tag = plate(name);
+  tag.position.set(0, 0.42, box.min.z - 0.003);
+  tag.rotation.y = Math.PI;
+  group.add(tag);
 
   return {
     group,
     wheels,
-    radius: TIRE_R,
-    setBrake: (k) => { M.tail.emissiveIntensity = 0.8 + 0.9 * k; },
+    radius,
+    setBrake: (k) => { if (tail) tail.emissiveIntensity = 0.7 + 0.8 * k; },
   };
 }

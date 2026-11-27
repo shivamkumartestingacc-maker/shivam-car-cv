@@ -1,151 +1,128 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { createCar } from './car.js';
-import { dock } from './content.js';
+import { loadCar } from './car.js';
 
-// ---- Choreography + look. Every motion below derives from one clock `t`, so it can be scrubbed/replayed. ----
+// ---- Choreography + look. Every motion derives from one clock `t`, so it can be scrubbed and replayed. ----
 const CFG = {
-  duration: 7.5,                               // last moving frame; after this the scene renders only on demand
-  car: { startZ: -16, speed: 9, brakeAt: 4.4, stopAt: 6.0 },
-  track: { from: 1.2, to: 3.0 },               // camera holds on the floor, then eases into following the car
-  orbit: { start: 1.4, end: 5.0, snap: 3,      // snap: 2 = soft, 3-4 = quick middle, firm settle
-           fromDeg: -25, toDeg: 90,            // -25 = front three-quarter, 0 = side, 90 = straight behind
-           fromR: 10, toR: 9.5, fromH: 9, toH: 2.4 },
-  push: { r: 0.9, from: 5.0, to: 7.5 },        // slow push-in once behind the car
-  look: { fromH: 0, toH: 1.1, ahead: 12, from: 3.6, to: 5.6 },
-  loading: { end: 2.0 },                       // floor counter 0 -> 100 (cinematic, not network time)
-  floorFade: { from: 2.6, to: 4.0 },           // red floor -> night
-  road: { from: 3.6, to: 5.0 },                // road appears only once the rear is coming round
-  dockAt: 5.6,
-  colors: { floor: '#c8102e', ink: '#0a0a0a', night: '#0e0c0c', ground: '#151313', road: '#090909', paint: '#efece6', glow: '#ff5a3c' },
+  duration: 8,                                  // last moving frame; afterwards the scene renders only on demand
+  car: { startZ: -22, speed: 8, brakeAt: 5.2, stopAt: 6.8 },
+  loading: { end: 2.2 },                        // stripes paint across the screen 0 -> 100% (cinematic, not network time)
+  stripe: { fromZ: -12, toZ: 13, horizonBy: 3.6 }, // paint tip during loading, then it runs off to the horizon
+  track: { from: 1.6, to: 3.2 },                // camera holds over the floor, then eases into following the car
+  orbit: { start: 2.2, end: 5.4, snap: 3,       // snap: 2 = soft, 3-4 = quick middle, firm settle
+           fromAz: 35, toAz: 0,                 // azimuth: 35 = stripes run diagonally on screen, 0 = straight behind
+           fromEl: 84, toEl: 13,                // elevation: 84 = bird's-eye, 12 = low chase
+           fromR: 28, toR: 8.6, roll: 4 },      // roll: slight dutch angle mid-move (degrees)
+  push: { r: 0.8, from: 5.4, to: 8 },           // slow push-in once behind the car
+  look: { toH: 0.8, ahead: 6, from: 3.4, to: 5.6 },
+  lettering: { fadeFrom: 2.4, fadeTo: 3.0 },   // floor LOADING + counter fade once loaded
+  colors: { ground: '#ede4cf', sky: '#e9dfca', red: '#e1312b', gap: '#f7f2e7', ink: '#1a1a1a', sun: '#fff1dc', fill: '#a9bccf' },
 };
 
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const span = (t, a, b) => clamp01((t - a) / (b - a));
 const smoother = (x) => x * x * x * (x * (x * 6 - 15) + 10);
 const inOut = (x, k) => (x < 0.5 ? (2 * x) ** k / 2 : 1 - (2 - 2 * x) ** k / 2);
-const lerp = THREE.MathUtils.lerp;
-const C = Object.fromEntries(Object.entries(CFG.colors).map(([k, v]) => [k, new THREE.Color(v)]));
+const lerp = THREE.MathUtils.lerp, rad = THREE.MathUtils.degToRad;
 
-// ---- Renderer: capped pixel ratio, no shadow maps, no post-processing ----
+// ---- Renderer: capped pixel ratio, one shadow map, no post-processing ----
 const coarse = matchMedia('(pointer: coarse)').matches;
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, coarse ? 1.5 : 2));
-renderer.toneMapping = THREE.NeutralToneMapping; // keeps the brand red red
+renderer.toneMapping = THREE.NeutralToneMapping;
+renderer.shadowMap.enabled = true;
 document.body.prepend(renderer.domElement);
 const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
 
 const scene = new THREE.Scene();
-scene.background = C.floor.clone();
-scene.fog = new THREE.Fog(C.floor.clone(), 25, 140);
+scene.background = new THREE.Color(CFG.colors.sky);
+scene.fog = new THREE.Fog(CFG.colors.sky, 30, 170);
 scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
-const ENV = { studio: 0.45, night: 0.25 }; // reflections on the black paint: lit studio -> night
-
+scene.environmentIntensity = 0.35;
 const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 500);
-const key = new THREE.DirectionalLight(0xffffff, 1.4);
-scene.add(key, key.target, new THREE.HemisphereLight(0xffffff, 0x221a1a, 0.5));
 
-// ---- Helpers ----
-const canvasTex = (w, h, draw) => {
-  const c = document.createElement('canvas');
-  c.width = w; c.height = h;
-  draw(c.getContext('2d'), w, h);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = aniso;
-  return t;
-};
-const flat = (w, l, mat, y) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l), mat); m.rotation.x = -Math.PI / 2; m.position.y = y; scene.add(m); return m; };
-const basic = (o) => new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, ...o });
-const glowTex = (inner) => canvasTex(256, 256, (x) => {
-  const g = x.createRadialGradient(128, 128, 0, 128, 128, 128);
-  g.addColorStop(0, inner); g.addColorStop(1, 'rgba(0,0,0,0)');
-  x.fillStyle = g; x.fillRect(0, 0, 256, 256);
-});
+// Low warm sun from the car's left -> long shadow to the right; cool sky fill tints the shadow slate-blue.
+const sun = new THREE.DirectionalLight(CFG.colors.sun, 3.2);
+sun.castShadow = true;
+sun.shadow.mapSize.setScalar(coarse ? 1024 : 2048);
+Object.assign(sun.shadow.camera, { left: -13, right: 13, top: 13, bottom: -13, near: 1, far: 60 });
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.02;
+sun.shadow.radius = 3;
+scene.add(sun, sun.target, new THREE.HemisphereLight(CFG.colors.fill, CFG.colors.ground, 0.55));
 
-// ---- Floor: starts as a full red painted floor carrying the loading counter ----
-const ground = flat(800, 800, new THREE.MeshBasicMaterial({ color: C.floor.clone() }), 0);
-const FONT = '"Anton", Impact, "Arial Narrow", sans-serif';
-
-// Floor lettering is laid along the direction of travel (+z) and read from the side camera.
-const floorDecal = (w, l, tex, z, x = 0) => {
-  const m = flat(w, l, basic({ map: tex }), 0.004);
-  m.rotation.set(-Math.PI / 2, 0, -Math.PI / 2 + 0.18); // canvas right -> +z, canvas up -> away from camera; slight diagonal like painted signage
-  m.position.set(x, 0.004, z);
+// ---- Floor: cream ground + red double racing stripe. The stripe IS the loading bar. ----
+const lambert = (o) => new THREE.MeshLambertMaterial(o);
+const flat = (w, l, mat, x, y) => {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l), mat);
+  m.rotation.x = -Math.PI / 2;
+  m.position.set(x, y, 0);
+  m.receiveShadow = true;
+  scene.add(m);
   return m;
 };
-const drawWord = (x, w, h) => {
-  x.clearRect(0, 0, w, h);
-  x.fillStyle = CFG.colors.ink;
-  x.font = `${h * 0.9}px ${FONT}`;
-  x.textBaseline = 'middle';
-  x.letterSpacing = `${h * 0.04}px`;
-  x.fillText('LOADING', 0, h * 0.54);
-};
-const word = floorDecal(12, 3, canvasTex(2048, 512, drawWord), 0, 2.4);  // far row
-const digitsCanvas = document.createElement('canvas');
-digitsCanvas.width = 1024; digitsCanvas.height = 512;
-const digitsTex = new THREE.CanvasTexture(digitsCanvas);
-digitsTex.colorSpace = THREE.SRGBColorSpace;
-digitsTex.anisotropy = aniso;
-const digits = floorDecal(7, 3.5, digitsTex, -0.5, -1.9);         // near row; the car drives between and over both
-let shownPct = -1;
-function drawPct(p) {
-  if (p === shownPct) return;
-  shownPct = p;
-  const x = digitsCanvas.getContext('2d'), { width: w, height: h } = digitsCanvas;
-  x.clearRect(0, 0, w, h);
-  x.fillStyle = CFG.colors.ink;
-  x.font = `${h * 0.95}px ${FONT}`;
-  x.textBaseline = 'middle';
-  x.fillText(String(p).padStart(3, '0'), 0, h * 0.55);
-  x.font = `${h * 0.32}px ${FONT}`;
-  x.fillText('%', w * 0.78, h * 0.3);
-  digitsTex.needsUpdate = true;
-}
-const stripe = flat(1.1, 300, basic({ color: C.ink }), 0.003);   // painted band, like gallery floor tape
-stripe.position.x = 5.2;
-const floorPaint = [word.material, digits.material, stripe.material];
-
-// ---- Road: invisible until the rear view. Ground/asphalt slide with the car (featureless), markings repeat. ----
-const road = flat(9, 800, basic({ color: C.road, opacity: 0 }), 0.002);
-const paint = basic({ color: C.paint, opacity: 0 });
-const DASH = 9, DASHES = 40, EDGE = 3, EDGES = 120;
-const dashes = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.16, 3.2), paint, DASHES);
-const edges = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.12, EDGE), paint, EDGES * 2);
-scene.add(dashes, edges);
-const mtx = new THREE.Matrix4(), vec = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
-const down = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
-function layoutRoad(z) {
-  ground.position.z = road.position.z = z + 300;
-  let b = Math.floor(z / DASH) * DASH - 3 * DASH;
-  for (let i = 0; i < DASHES; i++) dashes.setMatrixAt(i, mtx.compose(vec.set(0, 0.006, b + i * DASH), down, one));
-  b = Math.floor(z / EDGE) * EDGE - 3 * EDGE;
-  for (let i = 0; i < EDGES; i++) for (const s of [0, 1]) edges.setMatrixAt(i * 2 + s, mtx.compose(vec.set(s ? 4.2 : -4.2, 0.006, b + i * EDGE), down, one));
-  dashes.instanceMatrix.needsUpdate = edges.instanceMatrix.needsUpdate = true;
+// Floor layers never write depth and draw first (renderOrder), so the stripes can't z-fight the ground.
+const ground = flat(900, 900, lambert({ color: CFG.colors.ground, depthWrite: false }), 0, 0);
+ground.renderOrder = -2;
+const STRIPE_TAIL = -300;
+const stripeParts = [                               // [width, x, colour] — two red bands, light gap and outer pinstripes
+  [0.95, -0.6, CFG.colors.red], [0.95, 0.6, CFG.colors.red],
+  [0.25, 0, CFG.colors.gap], [0.12, -1.2, CFG.colors.gap], [0.12, 1.2, CFG.colors.gap],
+].map(([w, x, c]) => { const m = flat(w, 1, lambert({ color: c, depthWrite: false }), x, 0.002); m.renderOrder = -1; return m; });
+function paintTo(tip) {
+  for (const m of stripeParts) { m.scale.y = tip - STRIPE_TAIL; m.position.z = (tip + STRIPE_TAIL) / 2; }
 }
 
-// Night light: warm horizon glow behind the car + a headlight pool ahead, so a black car still reads.
-const horizon = new THREE.Mesh(new THREE.PlaneGeometry(320, 110), basic({ map: glowTex(CFG.colors.glow), blending: THREE.AdditiveBlending, opacity: 0, fog: false }));
-horizon.rotation.y = Math.PI;
-scene.add(horizon);
-const haze = flat(360, 140, basic({ map: glowTex(CFG.colors.glow), blending: THREE.AdditiveBlending, opacity: 0, fog: false }), 0.01); // same glow on the ground, so the horizon has no hard edge
-const pool = flat(9, 22, basic({ map: glowTex('rgba(255,244,230,0.8)'), blending: THREE.AdditiveBlending, opacity: 0 }), 0.008);
-const rim = new THREE.DirectionalLight(CFG.colors.glow, 0); // backlight from the glow: outlines roof and shoulders of the black car
-scene.add(rim, rim.target);
+// Floor lettering runs WITH the direction of travel (reads bottom -> top on screen), like gallery floor tape.
+const FONT = '"Anton", Impact, "Arial Narrow", sans-serif';
+function decal(w, l, x, cw, ch) {
+  const c = document.createElement('canvas');
+  c.width = cw; c.height = ch;
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = aniso;
+  const m = flat(l, w, lambert({ map: tex, transparent: true, depthWrite: false }), x, 0.004);
+  m.rotation.set(-Math.PI / 2, 0, -Math.PI / 2); // canvas right -> +z (travel), canvas up -> +x
+  return { m, c, x: c.getContext('2d'), tex };
+}
+const word = decal(1.9, 9, 2.75, 2048, 432);
+const count = decal(2.2, 4.6, -2.8, 1024, 490);
+function drawWord() {
+  const { x, c, tex } = word;
+  x.clearRect(0, 0, c.width, c.height);
+  x.fillStyle = CFG.colors.ink;
+  x.font = `${c.height * 0.95}px ${FONT}`;
+  x.textBaseline = 'middle';
+  x.letterSpacing = `${c.height * 0.05}px`;
+  x.fillText('LOADING', 0, c.height * 0.54);
+  tex.needsUpdate = true;
+}
+let shown = -1;
+function drawCount(p) {
+  if (p === shown) return;
+  shown = p;
+  const { x, c, tex } = count;
+  x.clearRect(0, 0, c.width, c.height);
+  x.fillStyle = CFG.colors.red;
+  x.font = `${c.height * 0.95}px ${FONT}`;
+  x.textBaseline = 'middle';
+  x.textAlign = 'right';
+  x.fillText(`${p}%`, c.width, c.height * 0.54);
+  tex.needsUpdate = true;
+}
 
 // ---- Car ----
-const car = createCar();
-scene.add(car.group);
+let car = null;
+const ready = loadCar({ url: window.INTRO_MODEL }).then((c) => { car = c; scene.add(c.group); });
 
-// ---- Camera framing that holds on any screen shape ----
-const view = { reach: 1 }; // distance multiplier for narrow / portrait screens
+// ---- Framing that holds on any screen shape ----
+const view = { reach: 1 };
 function resize() {
   const a = innerWidth / innerHeight;
   camera.aspect = a;
   camera.fov = Math.min(55, 35 * Math.sqrt(Math.max(1, 1.6 / a)));
-  const wide = Math.tan(THREE.MathUtils.degToRad(17.5)) * 1.6;            // horizontal reach of the 16:10 design
-  view.reach = Math.max(1, wide / (Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * a)) ** 0.7;
+  const wide = Math.tan(rad(17.5)) * 1.6;
+  view.reach = Math.max(1, wide / (Math.tan(rad(camera.fov / 2)) * a)) ** 0.7;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
   dirty = true;
@@ -159,69 +136,46 @@ function carZ(t) {
   return startZ + speed * brakeAt + (speed * d * (1 - (1 - u) ** 3)) / 3; // ease to a stop, velocity continuous
 }
 
-const cam = new THREE.Vector3(), aim = new THREE.Vector3(), col = new THREE.Color();
+const aim = new THREE.Vector3();
 function pose(t) {
   const z = carZ(t);
-  car.group.position.z = z;
-  for (const w of car.wheels) w.rotation.x = z / car.radius;
-  car.setBrake(smoother(span(t, CFG.car.brakeAt, CFG.car.brakeAt + 0.3)));
+  if (car) {
+    car.group.position.z = z;
+    for (const w of car.wheels) w.rotation.x = -z / car.radius;
+    car.setBrake(smoother(span(t, CFG.car.brakeAt, CFG.car.brakeAt + 0.3)));
+  }
 
-  // anchor: holds on the floor, then follows the car (zero camera velocity at start, car velocity at end)
-  const w = smoother(span(t, CFG.track.from, CFG.track.to));
-  const anchor = lerp(0, z, w);
+  // loading = paint tip sweeping across the screen; then the stripe races off to the horizon
+  const p = span(t, 0, CFG.loading.end);
+  const { fromZ, toZ, horizonBy } = CFG.stripe;
+  const tip = t <= CFG.loading.end ? lerp(fromZ, toZ, p) : lerp(toZ, 600, span(t, CFG.loading.end, horizonBy) ** 2);
+  paintTo(tip);
+  drawCount(Math.round(p * 100));
+  count.m.position.z = Math.min(tip, toZ) - 2.6;   // the counter rides just behind the paint tip
+  word.m.material.opacity = count.m.material.opacity = 1 - smoother(span(t, CFG.lettering.fadeFrom, CFG.lettering.fadeTo));
+
+  // camera: anchor holds over the floor, then follows the car; spherical orbit around it
+  const anchor = lerp(0, z, smoother(span(t, CFG.track.from, CFG.track.to)));
   const o = inOut(span(t, CFG.orbit.start, CFG.orbit.end), CFG.orbit.snap);
-  const th = THREE.MathUtils.degToRad(lerp(CFG.orbit.fromDeg, CFG.orbit.toDeg, o));
+  const az = rad(lerp(CFG.orbit.fromAz, CFG.orbit.toAz, o));
+  const el = rad(lerp(CFG.orbit.fromEl, CFG.orbit.toEl, o));
   const R = (lerp(CFG.orbit.fromR, CFG.orbit.toR, o) - CFG.push.r * smoother(span(t, CFG.push.from, CFG.push.to))) * view.reach;
-  const H = lerp(CFG.orbit.fromH, CFG.orbit.toH, o) * view.reach;
-  cam.set(-R * Math.cos(th), H, anchor - R * Math.sin(th));
   const ahead = CFG.look.ahead * smoother(span(t, CFG.look.from, CFG.look.to));
-  aim.set(0, lerp(CFG.look.fromH, CFG.look.toH, o), anchor + ahead);
-  camera.position.copy(cam);
+  aim.set(0, CFG.look.toH * o, anchor + ahead);
+  camera.position.set(-Math.sin(az) * Math.cos(el) * R, Math.sin(el) * R, anchor - Math.cos(az) * Math.cos(el) * R);
   camera.lookAt(aim);
-  key.position.set(-5, 10, z + 6);
-  key.target.position.set(0, 0, z);
+  camera.rotateZ(rad(CFG.orbit.roll) * Math.sin(Math.PI * o));
 
-  // red floor -> night road
-  const f = smoother(span(t, CFG.floorFade.from, CFG.floorFade.to));
-  col.copy(C.floor).lerp(C.night, f);
-  scene.background.copy(col);
-  scene.fog.color.copy(col);
-  ground.material.color.copy(C.floor).lerp(C.ground, f);
-  for (const m of floorPaint) m.opacity = 1 - f;
-  scene.environmentIntensity = lerp(ENV.studio, ENV.night, f);
-  const r = smoother(span(t, CFG.road.from, CFG.road.to));
-  road.material.opacity = paint.opacity = r;
-  horizon.material.opacity = r * 0.9;
-  haze.material.opacity = r * 0.55;
-  rim.intensity = r * 2.5;
-  pool.material.opacity = r;
-  horizon.position.set(0, 14, z + 170);
-  pool.position.z = z + 10;
-  haze.position.z = z + 150;
-  rim.position.set(0, 7, z + 30);
-  rim.target.position.set(0, 0, z);
-  layoutRoad(z);
-
-  drawPct(Math.round(span(t, 0, CFG.loading.end) * 100));
-  dockEl.classList.toggle('on', t >= CFG.dockAt);
+  sun.position.set(12, 7, z + 3);  // low sun -> long shadow
+  sun.target.position.set(0, 0, z);
+  ground.position.z = z;
 }
-
-// ---- Dock (data from content.js) ----
-const dockEl = document.getElementById('dock');
-const btn = (i) => `<button type="button" data-id="${i.id}">${i.label}</button>`;
-const link = (i) => `<a data-id="${i.id}" href="${i.href}">${i.label}</a>`;
-dockEl.innerHTML = `<div class="nav">${dock.nav.map(btn).join('')}</div><span class="sep" aria-hidden="true"></span><div class="pedals">${dock.contacts.map(link).join('')}</div>`;
-dockEl.addEventListener('click', (e) => {
-  const id = e.target.closest('[data-id]')?.dataset.id;
-  if (id) dispatchEvent(new CustomEvent('portfolio:nav', { detail: { id } })); // hook for billboards / overlays
-});
 
 // ---- Loop: renders every frame while things move, then only on demand ----
 const scrub = document.getElementById('scrub');
 const debug = window.INTRO_DEBUG || new URLSearchParams(location.search).has('debug');
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-let t = 0, playing = false, last = 0, dirty = true;
-let slow = 0, frames = 0;
+let t = 0, playing = false, last = 0, dirty = true, frames = 0, slow = 0;
 
 addEventListener('resize', resize);
 resize();
@@ -241,23 +195,27 @@ renderer.setAnimationLoop((now) => {
     t += dt;
     if (t >= CFG.duration) { t = CFG.duration; playing = false; }
     if (debug) scrub.value = t / CFG.duration;
-    // one-time downgrade on slow devices: average frame > 22ms -> pixel ratio 1
+    // one-time downgrade on slow devices: average frame > 22ms -> pixel ratio 1, smaller shadow map
     if (++frames > 20 && frames <= 80) slow += dt;
-    if (frames === 80 && slow / 60 > 0.022 && renderer.getPixelRatio() > 1) { renderer.setPixelRatio(1); resize(); }
+    if (frames === 80 && slow / 60 > 0.022 && renderer.getPixelRatio() > 1) {
+      renderer.setPixelRatio(1);
+      sun.shadow.mapSize.setScalar(1024);
+      sun.shadow.map?.dispose(); sun.shadow.map = null;
+      resize();
+    }
   } else if (!dirty) return;
   dirty = false;
   pose(t);
   renderer.render(scene, camera);
 });
 
-// Start once the floor font is ready (max 1.5s wait), so the counter never pops between typefaces.
+// Preload car + floor font, then start the clock (the intro never depends on network speed).
 pose(0);
-Promise.race([document.fonts.load(`100px ${FONT}`), new Promise((r) => setTimeout(r, 1500))]).then(() => {
-  const c = word.material.map.image;
-  drawWord(c.getContext('2d'), c.width, c.height);
-  word.material.map.needsUpdate = true;
-  shownPct = -1;
+Promise.all([ready, Promise.race([document.fonts.load(`100px ${FONT}`), new Promise((r) => setTimeout(r, 1500))])]).then(() => {
+  drawWord();
+  shown = -1;
+  renderer.compile(scene, camera);
   replay();
 });
 
-window.__intro = { CFG, seek: (s) => { playing = false; t = s; dirty = true; }, replay };
+window.__intro = { CFG, get car() { return car; }, seek: (s) => { playing = false; t = s; dirty = true; }, replay };

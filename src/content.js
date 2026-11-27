@@ -1,22 +1,4 @@
-// All portfolio content lives here. The scene reads it; nothing else needs editing to add work.
-
-// Dock shown once the car comes to rest. `id` is sent in a `portfolio:nav` event on click.
-export const dock = {
-  nav: [
-    { id: 'gear', label: 'Gear' },
-    { id: 'menu', label: 'Menu' },
-    { id: 'ux', label: 'UX case study' },
-    { id: 'motion', label: 'Motion' },
-    { id: 'visuals', label: 'Visuals' },
-    { id: 'ai', label: 'AI exploration' },
-  ],
-  // Pedals = contact links. Replace the placeholder hrefs.
-  contacts: [
-    { id: 'brake', label: 'Brake', href: 'mailto:hello@example.com' },
-    { id: 'accelerator', label: 'Accelerator', href: '#' },
-    { id: 'clutch', label: 'Clutch', href: '#' },
-  ],
-};
+// Portfolio content lives here; the scene reads it. (Dock/navigation: to be designed.)
 
 // Case studies become billboards along the road (next iteration).
 // at: metres along the road from where the car stops. side: 'left' | 'right'.
