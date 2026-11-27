@@ -5,16 +5,17 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 // ---- Choreography knobs. Car, camera and scene are tuned independently here. ----
 const CFG = {
-  duration: 6.5,            // total intro length (s)
+  duration: 5.0,            // total intro length (s)
   speed: 14,                // car speed (m/s), constant the whole time
   enter: { end: 2.4, lead: 10 }, // stage 1: camera starts `lead` m ahead (car off-screen left), eases into tracking
   orbit: {                  // stage 2: camera swings from side to rear around the car
-    start: 1.8, end: 6.2,
+    start: 2.0, end: 4.2,
+    snap: 4,                // easing power: 2 = soft, 4+ = quick middle, firm settle
     fromDeg: 0, toDeg: 90,  // 0 = side view (car moves left -> right), 90 = directly behind
     fromR: 8.5, toR: 8,     // distance from car
     fromH: 1.0, toH: 2.4,   // camera height
   },
-  look: { height: 0.6, fromAhead: 0, toAhead: 14, start: 4.0, end: 6.5 }, // aim pushes ahead to reveal the road, once camera is mostly behind
+  look: { height: 0.6, fromAhead: 0, toAhead: 14, start: 3.0, end: 4.8 }, // aim pushes ahead to reveal the road, once camera is mostly behind
   loader: { end: 2.4 },     // loading % runs over this span, then fades
   fov: 35,
   colors: { bg: 0xecebe8, ground: 0xe4e2de, road: 0x9a9a98, paint: 0xffffff, car: 0xf4f4f2 },
@@ -22,6 +23,7 @@ const CFG = {
 
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const smoother = (x) => x * x * x * (x * (x * 6 - 15) + 10);
+const inOut = (x, k) => (x < 0.5 ? (2 * x) ** k / 2 : 1 - (2 - 2 * x) ** k / 2);
 const span = (t, a, b) => clamp01((t - a) / (b - a));
 const lerp = THREE.MathUtils.lerp;
 
@@ -115,7 +117,7 @@ function pose(t) {
 
   const e = 1 - (1 - span(t, 0, CFG.enter.end)) ** 2;   // ease-out: static camera -> tracking
   const ld = CFG.enter.lead * (1 - e);
-  const o = smoother(span(t, CFG.orbit.start, CFG.orbit.end));
+  const o = inOut(span(t, CFG.orbit.start, CFG.orbit.end), CFG.orbit.snap);
   const th = THREE.MathUtils.degToRad(lerp(CFG.orbit.fromDeg, CFG.orbit.toDeg, o));
   const R = lerp(CFG.orbit.fromR, CFG.orbit.toR, o);
   cam.set(-R * Math.cos(th), lerp(CFG.orbit.fromH, CFG.orbit.toH, o), carZ + ld - R * Math.sin(th));
