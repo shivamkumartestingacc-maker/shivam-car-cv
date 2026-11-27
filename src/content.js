@@ -1,6 +1,6 @@
 // Portfolio content lives here; the scene reads it. (Dock/navigation: to be designed.)
 
-// Case studies = roadside billboards, shown in this order and alternating sides (placeholders while empty).
+// Case studies = billboard bridges over the road, shown in this order (placeholders while empty).
 // thumb: image on the board (optional). slides: the deck for the overlay opened by clicking the board.
 // Clicking fires window event `portfolio:open` with { id }.
 export const caseStudies = [

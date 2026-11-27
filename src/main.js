@@ -64,12 +64,9 @@ const edges = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.12, EDGE), paint
 const POLE = 24, POLES = 16;  // sparse roadside posts, outside the camera's orbit radius: depth cue + future billboard spots
 const poles = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.05, 0.05, 2.4, 6), new THREE.MeshStandardMaterial({ color: 0x8c8c8c }), POLES * 2);
 poles.castShadow = true;
-// Dark zebra crossings painted across the road at intervals.
-const CROSS = 110, CROSSINGS = 4, BARS = 8;
-const zebra = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.55, 3.2), new THREE.MeshBasicMaterial({ color: 0x3a3a3a }), CROSSINGS * BARS);
 // Instances are re-laid every frame around the car, so skip culling (their bounds are computed once and go stale).
-dashes.frustumCulled = edges.frustumCulled = poles.frustumCulled = zebra.frustumCulled = false;
-scene.add(dashes, edges, poles, zebra);
+dashes.frustumCulled = edges.frustumCulled = poles.frustumCulled = false;
+scene.add(dashes, edges, poles);
 const boards = createBillboards(scene, caseStudies);
 
 const m = new THREE.Matrix4(), q = new THREE.Quaternion(), flat = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
@@ -85,10 +82,7 @@ function layoutRoad(z) {
   b = base(POLE);
   for (let i = 0; i < POLES; i++) for (const s of [0, 1])
     poles.setMatrixAt(i * 2 + s, m.compose(p.set(s ? 10 : -10, 1.2, b + i * POLE), q, one));
-  b = Math.floor(z / CROSS) * CROSS; // nearest crossing behind the car, then the next ones ahead
-  for (let i = 0; i < CROSSINGS; i++) for (let k = 0; k < BARS; k++)
-    zebra.setMatrixAt(i * BARS + k, m.compose(p.set(-3.5 + k, 0.011, b + i * CROSS), flat, one));
-  dashes.instanceMatrix.needsUpdate = edges.instanceMatrix.needsUpdate = poles.instanceMatrix.needsUpdate = zebra.instanceMatrix.needsUpdate = true;
+  dashes.instanceMatrix.needsUpdate = edges.instanceMatrix.needsUpdate = poles.instanceMatrix.needsUpdate = true;
 }
 
 // ---- Car (black, badges removed, SHIVAM plate: see car.js) ----
