@@ -4,29 +4,65 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // Faint sky dome, leaf-card trees (cherry blossom + green), falling petals, benches with street lamps.
 // Everything is generated in code: no downloads. Trees are instanced and recycled around the car.
 
-const SKY = { horizon: '#ecebe8', top: '#b3cfeb', glow: '#f3ece0' }; // soft blue overhead, fading to the fog colour at the horizon
+const SKY = { horizon: '#ecebe8', top: '#f4ecd8', blue: '#a8c2df', cloud: '#fbf7ec' }; // watercolour: warm cream sky, soft blue clouds
 
+// Sky dome with drifting watercolour clouds (fbm noise in the shader) and a few birds. No textures, no downloads.
 export function createSky(scene) {
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
     fog: false,
-    uniforms: { horizon: { value: new THREE.Color(SKY.horizon) }, top: { value: new THREE.Color(SKY.top) }, glow: { value: new THREE.Color(SKY.glow) } },
+    uniforms: {
+      horizon: { value: new THREE.Color(SKY.horizon) }, top: { value: new THREE.Color(SKY.top) },
+      blue: { value: new THREE.Color(SKY.blue) }, cloud: { value: new THREE.Color(SKY.cloud) }, time: { value: 0 },
+    },
     vertexShader: 'varying vec3 d; void main(){ d = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: `varying vec3 d; uniform vec3 horizon, top, glow;
+    fragmentShader: `varying vec3 d; uniform vec3 horizon, top, blue, cloud; uniform float time;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
+      float fbm(vec2 p){ float v = 0.0, a = 0.5; for (int k = 0; k < 5; k++){ v += a * n(p); p = p * 2.03 + 7.1; a *= 0.5; } return v; }
       void main(){
-        vec3 c = mix(horizon, top, smoothstep(0.0, 0.28, d.y));
-        c = mix(c, glow, 0.6 * pow(max(dot(d, normalize(vec3(-0.4, 0.12, 1.0))), 0.0), 8.0)); // soft warm patch ahead
+        vec3 c = mix(horizon, top, smoothstep(0.0, 0.35, d.y));
+        vec2 uv = d.xz / (d.y + 0.18) * 1.6 + vec2(time * 0.012, time * 0.004);  // cloud layer projected onto a plane overhead
+        float f = fbm(uv);
+        float body = smoothstep(0.45, 0.72, f);                     // cloud mass
+        float lit = smoothstep(0.6, 0.85, fbm(uv * 1.7 + 3.0));    // bright cream tops inside the mass
+        float band = smoothstep(0.02, 0.12, d.y) * (1.0 - smoothstep(0.35, 0.75, d.y)); // clouds sit low-to-mid sky, clear overhead
+        vec3 cl = mix(blue, cloud, lit);
+        c = mix(c, cl, body * band * 0.75);
         gl_FragColor = vec4(c, 1.0);
         #include <colorspace_fragment>
       }`,
   });
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(300, 32, 16), mat);
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(300, 48, 24), mat);
   dome.renderOrder = -10;
   scene.add(dome);
-  return { update: (camera) => dome.position.copy(camera.position) };
-}
 
+  // birds: thin V shapes gliding across, wings flapping
+  const birdMat = new THREE.LineBasicMaterial({ color: '#5d6b7c', fog: false });
+  const birds = Array.from({ length: 4 }, (_, i) => {
+    const g = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(9), 3));
+    const line = new THREE.Line(g, birdMat);
+    line.renderOrder = -9;
+    scene.add(line);
+    return { line, off: [i * 7 - 10, 30 + (i % 2) * 4 + i, 130 + i * 9], phase: i * 1.7 };
+  });
+  const t0 = performance.now();
+  return {
+    update(camera) {
+      const t = (performance.now() - t0) / 1000;
+      mat.uniforms.time.value = t;
+      dome.position.copy(camera.position);
+      for (const b of birds) {
+        const p = b.line.geometry.attributes.position.array, s = 2.4, flap = Math.sin(t * 5 + b.phase) * 0.9;
+        p.set([-s, flap, 0, 0, -0.45, 0, s, flap, 0]);
+        b.line.geometry.attributes.position.needsUpdate = true;
+        b.line.position.set(b.off[0] + ((t * 2.2 + b.phase * 10) % 80) - 40, b.off[1], camera.position.z + b.off[2]);
+      }
+    },
+  };
+}
 
 // ---------- Leaf-card trees (bruno-simon.com style: canopies built from many small square leaves) ----------
 const rng = (seed) => () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -228,8 +264,8 @@ export function createBenches(scene, { step = 30, count = 10, start = 30 } = {})
 // ---------- Faint city skyline far out on both sides ----------
 // Layered building silhouettes painted in code; far layers paler. They travel with the car, so they read as distant backdrop.
 const SKYLINE = [ // [distance from road, height, colour, opacity]
-  [170, 50, '#cdd3db', 0.4],
-  [130, 36, '#b9c2cc', 0.45],
+  [170, 50, '#bcc5d0', 0.6],
+  [130, 36, '#a3afbd', 0.7],
 ];
 
 function skylineTexture(seed, colour) {
