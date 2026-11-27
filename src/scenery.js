@@ -4,7 +4,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // Faint sky dome, leaf-card trees (cherry blossom + green), falling petals, benches with street lamps.
 // Everything is generated in code: no downloads. Trees are instanced and recycled around the car.
 
-const SKY = { horizon: '#ecebe8', top: '#dde5ec', glow: '#f3ece0' }; // keep close to the fog colour: barely-there sky
+const SKY = { horizon: '#ecebe8', top: '#b3cfeb', glow: '#f3ece0' }; // soft blue overhead, fading to the fog colour at the horizon
 
 export function createSky(scene) {
   const mat = new THREE.ShaderMaterial({
@@ -15,7 +15,7 @@ export function createSky(scene) {
     vertexShader: 'varying vec3 d; void main(){ d = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: `varying vec3 d; uniform vec3 horizon, top, glow;
       void main(){
-        vec3 c = mix(horizon, top, smoothstep(0.0, 0.55, d.y));
+        vec3 c = mix(horizon, top, smoothstep(0.0, 0.28, d.y));
         c = mix(c, glow, 0.6 * pow(max(dot(d, normalize(vec3(-0.4, 0.12, 1.0))), 0.0), 8.0)); // soft warm patch ahead
         gl_FragColor = vec4(c, 1.0);
         #include <colorspace_fragment>

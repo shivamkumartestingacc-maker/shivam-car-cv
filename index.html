@@ -12,9 +12,6 @@
     #loader .fill { height: 100%; width: 0; background: #222; }
     #replay { position: fixed; right: 20px; bottom: 20px; background: none; border: 1px solid #0003; color: #333; padding: 6px 12px; font: inherit; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
     #scrub { position: fixed; left: 20px; right: 140px; bottom: 24px; display: none; }
-    #hint { position: fixed; left: 20px; bottom: 22px; color: #555; font-size: 12px; opacity: 0; transition: opacity .6s; pointer-events: none; }
-    #hint.on { opacity: 1; }
-    #hint kbd { font: inherit; padding: 1px 6px; border: 1px solid #0003; border-radius: 4px; }
 
     /* ---- Case-study deck overlay ---- */
     /* opens by growing out of the clicked billboard (clip-path from its screen rect), content fades in after */
@@ -52,7 +49,6 @@
 </head>
 <body>
   <div id="loader"><span id="pct">Loading</span><div class="bar"><div class="fill" id="fill"></div></div></div>
-  <div id="hint"><kbd>&uarr;</kbd><kbd>W</kbd> forward &nbsp; <kbd>&darr;</kbd><kbd>S</kbd> back &nbsp; <kbd>Space</kbd> stop &nbsp; click a billboard to open it</div>
   <button id="replay" title="Replay (R)">Replay</button>
   <input id="scrub" type="range" min="0" max="1" step="0.001" value="0" />
   <script type="module" src="/src/main.js"></script>

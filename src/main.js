@@ -64,12 +64,9 @@ const DASH = 8, DASHES = 50;
 const dashes = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.15, 3), paint, DASHES);
 const EDGE = 2, EDGES = 300; // edge lines as short segments so they can wrap with the markers
 const edges = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.12, EDGE), paint, EDGES * 2);
-const POLE = 24, POLES = 16;  // sparse roadside posts, outside the camera's orbit radius: depth cue + future billboard spots
-const poles = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.05, 0.05, 2.4, 6), new THREE.MeshStandardMaterial({ color: 0x8c8c8c }), POLES * 2);
-poles.castShadow = true;
 // Instances are re-laid every frame around the car, so skip culling (their bounds are computed once and go stale).
-dashes.frustumCulled = edges.frustumCulled = poles.frustumCulled = false;
-scene.add(dashes, edges, poles);
+dashes.frustumCulled = edges.frustumCulled = false;
+scene.add(dashes, edges);
 const sky = createSky(scene), trees = createTrees(scene), petals = createPetals(scene), benches = createBenches(scene);
 let boards = null, decks = [];
 const decksReady = Promise.all(caseStudies.map((id) => loadDeck(id).catch((e) => console.warn(e))))
@@ -85,10 +82,7 @@ function layoutRoad(z) {
   b = base(EDGE);
   for (let i = 0; i < EDGES; i++) for (const s of [0, 1])
     edges.setMatrixAt(i * 2 + s, m.compose(p.set(s ? 4.2 : -4.2, 0.01, b + i * EDGE), flat, one));
-  b = base(POLE);
-  for (let i = 0; i < POLES; i++) for (const s of [0, 1])
-    poles.setMatrixAt(i * 2 + s, m.compose(p.set(s ? 10 : -10, 1.2, b + i * POLE), q, one));
-  dashes.instanceMatrix.needsUpdate = edges.instanceMatrix.needsUpdate = poles.instanceMatrix.needsUpdate = true;
+  dashes.instanceMatrix.needsUpdate = edges.instanceMatrix.needsUpdate = true;
 }
 
 // ---- Car (black, badges removed, SHIVAM plate: see car.js) ----
@@ -215,7 +209,6 @@ renderer.domElement.addEventListener('click', (e) => {
   openDeck(deck, () => { deckOpen = false; }, () => screenRect(panel)); // the car brakes to a stop behind the deck
 });
 
-const hint = document.getElementById('hint');
 pose(0, 0);
 renderer.setAnimationLoop((now) => {
   const dt = Math.min((now - last) / 1000, 0.05);
@@ -225,7 +218,6 @@ renderer.setAnimationLoop((now) => {
     else driveStep(dt);
   }
   if (debug && playing) scrub.value = t / CFG.duration;
-  hint.classList.toggle('on', playing && t >= CFG.duration && !deckOpen);
   pose(t, CFG.speed * t + drive.z);
   petals.update(dt, CFG.speed * t + drive.z);
   renderer.render(scene, camera);
