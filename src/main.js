@@ -5,12 +5,13 @@ import { createBillboards } from './billboards.js';
 import { caseStudies } from './content.js';
 import { loadDeck, openDeck } from './deck.js';
 import { createSky, createTrees, createPetals, createBenches, createSkyline } from './scenery.js';
+import { createEngineSound } from './sound.js';
 
 // ---- Choreography knobs. Car, camera and scene are tuned independently here. ----
 const CFG = {
   duration: 5.6,            // total intro length (s)
-  speed: 14,                // car speed during the intro (m/s); it keeps cruising at this after
-  drive: { max: 26, reverse: 8, accel: 10, brake: 18 }, // after the intro: arrows/WASD drive, Space stops
+  speed: 9,                 // car speed during the intro (m/s); it keeps cruising at this after
+  drive: { max: 16, reverse: 6, accel: 6, brake: 12 }, // after the intro: arrows/WASD drive, Space stops
   enter: { lead: 10 },           // stage 1: camera starts `lead` m ahead (car off-screen left) at rest, then ramps to car speed
   orbit: {                  // stage 2: camera swings from side to rear around the car
     start: 1.8, end: 5.0,   // smootherstep over this span: gentle start, gentle settle
@@ -174,6 +175,12 @@ function driveStep(dt) {
   drive.brake += ((slowing && Math.abs(drive.v) > 0.05) || drive.stopped ? 1 - drive.brake : -drive.brake) * Math.min(1, dt * 8);
 }
 
+// Feeble engine sound: starts on the first click/key (browser rule); the Sound button mutes it.
+const engine = createEngineSound();
+const soundBtn = document.getElementById('sound');
+for (const ev of ['pointerdown', 'keydown']) addEventListener(ev, () => engine.start(), { once: true });
+soundBtn.onclick = () => { engine.start(); soundBtn.textContent = engine.toggle() ? 'Sound off' : 'Sound on'; };
+
 const replay = () => { t = 0; playing = true; Object.assign(drive, { z: 0, v: CFG.speed, stopped: false, brake: 0 }); held.clear(); };
 document.getElementById('replay').onclick = replay;
 if (debug) {
@@ -221,6 +228,7 @@ renderer.setAnimationLoop((now) => {
   if (debug && playing) scrub.value = t / CFG.duration;
   pose(t, CFG.speed * t + drive.z);
   petals.update(dt, CFG.speed * t + drive.z);
+  engine.update(t < CFG.duration ? CFG.speed : drive.v, CFG.drive.max);
   renderer.render(scene, camera);
 });
 

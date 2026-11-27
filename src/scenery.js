@@ -253,7 +253,7 @@ export function createBenches(scene, { step = 30, count = 10, start = 30 } = {})
       const first = Math.max(0, Math.floor((z - start) / step) - 1);
       pool.forEach((g, k) => {
         const n = first + k, side = hash(n * 3.1) < 0.5 ? -1 : 1;
-        g.position.set(side * 7.4, 0, start + n * step + (hash(n * 5.7) - 0.5) * step * 0.6);
+        g.position.set(side * 9.2, 0, start + n * step + (hash(n * 5.7) - 0.5) * step * 0.6);
         g.rotation.y = -side * Math.PI / 2; // seat faces the road
         g.children[g.children.length - 1].visible = hash(n * 9.3) < 0.7; // lamp beside ~70% of benches
       });

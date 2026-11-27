@@ -2,8 +2,8 @@ import * as THREE from 'three';
 
 // Overhead billboard bridges spanning the road: one per case study, repeating in order as the car drives.
 // Artwork comes from content.js (title + optional thumb image). Each panel carries userData.id for click handling.
-const W = 7.2, H = 2.8, LIFT = 5.2; // panel size and clearance above the road (m)
-const SPAN = 11, BAR = 0.24;         // distance between the two legs (road is 8.4 wide), beam/leg thickness
+const W = 12, H = 4.8, LIFT = 5.2;  // panel size and clearance above the road (m): big enough to read in passing
+const SPAN = 14, BAR = 0.3;          // distance between the two legs (road is 8.4 wide), beam/leg thickness
 
 function artwork(item, i) {
   const c = document.createElement('canvas');
@@ -38,7 +38,7 @@ function artwork(item, i) {
   return tex;
 }
 
-export function createBillboards(scene, items, { start = 120, spacing = 70, count = 5 } = {}) {
+export function createBillboards(scene, items, { start = 140, spacing = 150, count = 4 } = {}) {
   const list = items.length ? items : [1, 2, 3].map((n) => ({ id: `placeholder-${n}`, title: 'Coming soon' }));
   const fronts = list.map((item, i) => new THREE.MeshBasicMaterial({ map: artwork(item, i) })); // unlit: artwork reads true
   const frame = new THREE.MeshStandardMaterial({ color: 0x1d1d1d, roughness: 0.6 });
