@@ -40,16 +40,6 @@ export async function loadDeck(id) {
   };
 }
 
-// A one-slide deck for a single piece of work (motion / visual / AI): media + title + note + optional link.
-export function itemDeck(item, label) {
-  const parts = [item.link ? { t: 'frame', src: item.link, poster: item.thumb, alt: item.title } : { t: 'media', alt: item.title, src: item.media || item.thumb }];
-  parts.push({ t: 'h3', text: label }, { t: 'h2', text: item.title });
-  if (item.tags) parts.push({ t: 'tags', list: item.tags });
-  if (item.desc) parts.push({ t: 'p', text: item.desc });
-  if (item.link) parts.push({ t: 'a', text: 'Open in a new tab', href: item.link });
-  return { id: item.id, title: item.title, slides: [parts] };
-}
-
 function renderSlide(parts) {
   const slide = document.createElement('section');
   slide.className = 'slide';
@@ -57,22 +47,6 @@ function renderSlide(parts) {
   copy.className = 'copy';
   let list = null;
   for (const p of parts) {
-    if (p.t === 'frame') { // live preview of a site; its screenshot shows behind it while it loads
-      const box = document.createElement('div');
-      box.className = 'media frame';
-      box.style.backgroundImage = `url("${p.poster}")`;
-      box.append(Object.assign(document.createElement('iframe'), { src: p.src, title: p.alt, loading: 'lazy', allow: 'autoplay; fullscreen' }));
-      slide.append(box);
-      slide.classList.add('has-media', 'wide');
-      continue;
-    }
-    if (p.t === 'tags') {
-      const row = document.createElement('div');
-      row.className = 'tags';
-      for (const tag of p.list) row.append(Object.assign(document.createElement('span'), { textContent: tag }));
-      copy.append(row);
-      continue;
-    }
     if (p.t === 'media') {
       const video = /\.(mp4|webm)$/i.test(p.src);
       const m = document.createElement(video ? 'video' : 'img');

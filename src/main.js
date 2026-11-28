@@ -3,7 +3,8 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { loadCar } from './car.js';
 import { createBillboards } from './billboards.js';
 import { caseStudies, motion, visuals, ai, gears, contacts } from './content.js';
-import { loadDeck, openDeck, itemDeck } from './deck.js';
+import { loadDeck, openDeck } from './deck.js';
+import { openLightbox } from './lightbox.js';
 import { createSky, createTrees, createPetals, createBenches, createSkyline } from './scenery.js';
 import { createEngineSound } from './sound.js';
 
@@ -84,8 +85,12 @@ function setGear(id) {
   bridges.visible = id === 'case';
   sideBoards.visible = id !== 'case';
   if (id !== 'case') sideBoards.setItems(SETS[id].map((it) => ({ ...it, label: LABEL[id] })));
-  for (const b of document.querySelectorAll('.gear-slot')) b.setAttribute('aria-pressed', String(b.dataset.gear === id));
-  document.querySelector('.gear-gate').dataset.at = gears.findIndex((g) => g.id === id);
+  const i = gears.findIndex((g) => g.id === id), pin = document.querySelector('.pin');
+  for (const b of document.querySelectorAll('.place')) b.setAttribute('aria-pressed', String(b.dataset.gear === id));
+  pin.style.left = `${PLACES[i]}%`;
+  pin.querySelector('svg').innerHTML = ICONS[id];
+  pin.querySelector('.pin-label').textContent = gears[i].label;
+  pin.classList.remove('drop'); void pin.offsetWidth; pin.classList.add('drop'); // little bounce on arrival
 }
 const activeBoards = () => (gear === 'case' ? bridges : sideBoards);
 
@@ -230,25 +235,53 @@ function screenRect(panel) {
 renderer.domElement.addEventListener('click', (e) => {
   const id = boardAt(e);
   const item = gear === 'case' ? null : SETS[gear].find((x) => x.id === id);
-  const deck = gear === 'case' ? decks.find((d) => d.id === id) : item && itemDeck(item, LABEL[gear]);
-  if (!deck || deckOpen) return;
+  const deck = gear === 'case' && decks.find((d) => d.id === id);
+  if ((!deck && !item) || deckOpen) return;
   const panel = activeBoards().panels.find((p) => p.userData.id === id && ray.intersectObject(p).length);
+  if (item) { // work boards just enlarge in place
+    deckOpen = true;
+    return openLightbox(item, () => screenRect(panel), () => { deckOpen = false; });
+  }
   deckOpen = true;
   openDeck(deck, () => { deckOpen = false; }, () => screenRect(panel)); // the car brakes to a stop behind the deck
 });
 
-// ---- Dock: gear selector (left), contact pedals (right) ----
+// ---- Dock: a faded street map. Sections are places on it; a location pin sits on the one selected.
+//      Contact stamps at the right end. ----
 const dockEl = document.getElementById('dock');
 let lift = 0;
+const ICONS = { // 24px line icons inside the pin
+  case: '<path d="M4 8h16v11H4z M9 8V5h6v3 M4 13h16"/>',
+  motion: '<path d="M8 5l11 7-11 7z"/>',
+  visuals: '<path d="M4 5h16v14H4z M4 16l5-5 4 4 3-3 4 4"/><circle cx="15.5" cy="9" r="1.5"/>',
+  ai: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z M18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',
+};
+const PLACES = [14, 38, 61, 84]; // x positions (%) of the sections along the map
+function streetMap() { // light, procedural map: parks, water, roads, a few faint place names
+  let seed = 9;
+  const r = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const parks = Array.from({ length: 9 }, () => `<ellipse cx="${r() * 1000}" cy="${r() * 200}" rx="${30 + r() * 60}" ry="${14 + r() * 26}" transform="rotate(${r() * 60 - 30} 0 0)"/>`).join('');
+  const minor = Array.from({ length: 26 }, () => { const x = r() * 1000, y = r() * 200; return `<path d="M${x} ${y} l${r() * 160 - 80} ${r() * 120 - 60}"/>`; }).join('');
+  const names = ['Pixel Park', 'Kerning Lake', 'Grid Common', 'Bezier Heights', 'Prototype Bay', 'Layer Lane'];
+  const labels = names.map((n, i) => `<text x="${60 + i * 160 + r() * 40}" y="${40 + r() * 130}">${n}</text>`).join('');
+  return `<svg class="streets" viewBox="0 0 1000 200" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <rect width="1000" height="200" fill="#f7f6f2"/>
+    <g fill="#dcebc9" opacity=".75">${parks}</g>
+    <path d="M-20 150 C 140 120, 240 175, 380 140 S 620 60, 760 95 S 940 150, 1020 120" fill="none" stroke="#cfe1ef" stroke-width="16"/>
+    <ellipse cx="250" cy="55" rx="55" ry="22" fill="#cfe1ef"/>
+    <g fill="none" stroke="#e6e3dc" stroke-width="2">${minor}</g>
+    <g fill="none" stroke="#e1ded6" stroke-width="9"><path d="M0 95 C 200 70, 420 120, 1000 80"/><path d="M520 0 C 500 80, 560 140, 540 200"/><path d="M120 200 C 160 120, 90 60, 180 0"/></g>
+    <g fill="none" stroke="#ffffff" stroke-width="6"><path d="M0 95 C 200 70, 420 120, 1000 80"/><path d="M520 0 C 500 80, 560 140, 540 200"/><path d="M120 200 C 160 120, 90 60, 180 0"/></g>
+    <g font-family="system-ui, sans-serif" font-size="13" font-weight="600" fill="#b7b3ab" letter-spacing=".5">${labels}</g>
+  </svg>`;
+}
 dockEl.innerHTML = `
-  <div class="gearbox"><span class="dock-cap">Gear</span>
-    <div class="gear-gate" data-at="0"><span class="gear-knob" aria-hidden="true"></span>
-      ${gears.map((g) => `<button type="button" class="gear-slot" data-gear="${g.id}" aria-pressed="false" title="${g.label} (${g.key})"><b>${g.short}</b><small>${g.label}</small></button>`).join('')}
-    </div></div>
-  <span class="dock-sep" aria-hidden="true"></span>
-  <div class="pedals"><span class="dock-cap">Contact</span>
-    <div class="pedal-row">${contacts.map((c) => `<a class="pedal" href="${c.href}" target="_blank" rel="noopener"><i aria-hidden="true"></i><b>${c.label}</b><small>${c.pedal}</small></a>`).join('')}</div></div>`;
-dockEl.addEventListener('click', (e) => { const b = e.target.closest('.gear-slot'); if (b) setGear(b.dataset.gear); });
+  <div class="dock-map">${streetMap()}
+    ${gears.map((g, i) => `<button type="button" class="place" data-gear="${g.id}" style="left:${PLACES[i]}%" aria-pressed="false" title="${g.label} (${g.key})"><i></i><span>${g.label}</span></button>`).join('')}
+    <div class="pin" aria-hidden="true"><div class="pin-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"></svg></div><b class="pin-label"></b></div>
+  </div>
+  <div class="stamps">${contacts.map((c, i) => `<a class="stamp" style="--c:${c.colour};--r:${[-5, 3, -2, 6][i % 4]}deg" href="${c.href}" target="_blank" rel="noopener" title="${c.label}"><span class="stamp-face"><b>${c.glyph}</b><small>${c.label}</small></span></a>`).join('')}</div>`;
+dockEl.addEventListener('click', (e) => { const b = e.target.closest('.place'); if (b) setGear(b.dataset.gear); });
 setGear('case');
 
 pose(0, 0);
@@ -260,10 +293,10 @@ renderer.setAnimationLoop((now) => {
     else driveStep(dt);
   }
   if (debug && playing) scrub.value = t / CFG.duration;
-  const dockOn = t >= CFG.duration && !deckOpen;
-  dockEl.classList.toggle('on', dockOn);
+  const uiOn = t >= CFG.duration && !deckOpen;
+  dockEl.classList.toggle('on', uiOn);
   // lens shift: once the dock shows, the frame slides up so the car sits clear of it
-  lift += ((dockOn ? dockEl.offsetHeight + 24 : 0) - lift) * Math.min(1, dt * 3);
+  lift += ((uiOn ? dockEl.offsetHeight + 30 : 0) - lift) * Math.min(1, dt * 3);
   camera.setViewOffset(innerWidth, innerHeight, 0, lift, innerWidth, innerHeight);
   pose(t, CFG.speed * t + drive.z);
   petals.update(dt, CFG.speed * t + drive.z);
