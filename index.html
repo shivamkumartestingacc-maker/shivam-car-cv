@@ -10,8 +10,8 @@
     #loader { position: fixed; left: 50%; bottom: 12vh; transform: translateX(-50%); width: 220px; text-align: center; color: #555; letter-spacing: .18em; font-size: 11px; text-transform: uppercase; transition: opacity .6s; pointer-events: none; }
     #loader .bar { margin-top: 10px; height: 1px; background: #0002; }
     #loader .fill { height: 100%; width: 0; background: #222; }
-    #sound { position: fixed; right: 108px; bottom: 20px; background: none; border: 1px solid #0003; color: #333; padding: 6px 12px; font: inherit; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
-    #replay { position: fixed; right: 20px; bottom: 20px; background: none; border: 1px solid #0003; color: #333; padding: 6px 12px; font: inherit; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
+    #sound { position: fixed; right: 108px; top: 20px; background: none; border: 1px solid #0003; color: #333; padding: 6px 12px; font: inherit; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
+    #replay { position: fixed; right: 20px; top: 20px; background: none; border: 1px solid #0003; color: #333; padding: 6px 12px; font: inherit; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
     #scrub { position: fixed; left: 20px; right: 140px; bottom: 24px; display: none; }
 
     /* ---- Case-study deck overlay ---- */
@@ -44,11 +44,43 @@
     .deck-close:hover, .deck-nav:hover { background: #1a1a1a0d; }
     .deck-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #1a1a1a14; }
     .deck-progress i { display: block; height: 100%; width: 0; background: #e1312b; transition: width .5s; }
-    @media (max-width: 760px) { .slide.has-media { grid-template-columns: 1fr; gap: 24px; } }
+    @media (max-width: 760px) { .slide.has-media, .slide.wide { grid-template-columns: 1fr; gap: 24px; } }
     @media (prefers-reduced-motion: reduce) { .deck, .deck > *, .slide, .slide .copy > *, .slide .media { transition: none; } }
+    /* ---- Dock: gear gate (left) + contact pedals (right). Appears once the intro settles. ---- */
+    #dock { position: fixed; left: 50%; bottom: 18px; z-index: 5; display: flex; align-items: stretch; gap: 18px; padding: 10px 16px 12px; border-radius: 18px;
+      background: rgba(250,248,244,.86); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid #1a1a1a14; box-shadow: 0 8px 30px #1a1a1a14;
+      transform: translate(-50%, 24px); opacity: 0; pointer-events: none; transition: opacity .5s, transform .6s cubic-bezier(.2,.8,.2,1); max-width: calc(100vw - 24px); }
+    #dock.on { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+    .dock-cap { display: block; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #8a867f; margin-bottom: 6px; }
+    .dock-sep { width: 1px; background: #1a1a1a1f; }
+    .gear-gate { position: relative; display: grid; grid-template-columns: repeat(4, 64px); background: #1c1c1e; border-radius: 12px; padding: 4px; }
+    .gear-knob { position: absolute; top: 4px; left: 4px; width: 64px; bottom: 4px; border-radius: 9px; background: linear-gradient(#3a3a3d, #252527); box-shadow: inset 0 1px 0 #ffffff26, 0 2px 6px #0006; transition: transform .45s cubic-bezier(.5,1.6,.4,1); }
+    .gear-gate[data-at="1"] .gear-knob { transform: translateX(64px); } .gear-gate[data-at="2"] .gear-knob { transform: translateX(128px); } .gear-gate[data-at="3"] .gear-knob { transform: translateX(192px); }
+    .gear-slot { position: relative; background: none; border: 0; color: #8d8c88; cursor: pointer; padding: 6px 0 5px; font: inherit; display: grid; justify-items: center; gap: 1px; }
+    .gear-slot b { font: 700 17px/1 system-ui, sans-serif; }
+    .gear-slot small { font-size: 9.5px; letter-spacing: .02em; white-space: nowrap; }
+    .gear-slot[aria-pressed="true"] { color: #f4f2ee; } .gear-slot[aria-pressed="true"] b { color: #ff5a4a; }
+    .gear-slot:focus-visible, .pedal:focus-visible { outline: 2px solid #e1312b; outline-offset: 2px; }
+    .pedal-row { display: flex; gap: 8px; align-items: flex-end; }
+    .pedal { display: grid; justify-items: center; gap: 3px; width: 62px; text-decoration: none; color: #1a1a1a; }
+    .pedal i { display: block; width: 40px; height: 44px; border-radius: 7px 7px 10px 10px; background: repeating-linear-gradient(0deg, #2a2a2c 0 3px, #1a1a1c 3px 6px); box-shadow: inset 0 1px 0 #ffffff1f, 0 3px 0 #0d0d0e; transform-origin: 50% 100%; transition: transform .15s; }
+    .pedal:nth-child(3) i { width: 30px; height: 52px; } /* accelerator: tall and narrow */
+    .pedal:hover i { transform: perspective(200px) rotateX(18deg) translateY(2px); }
+    .pedal b { font-size: 12px; font-weight: 600; } .pedal small { font-size: 9.5px; color: #8a867f; letter-spacing: .06em; text-transform: uppercase; }
+    .slide.wide { grid-template-columns: minmax(0, .7fr) minmax(0, 1.6fr); }
+    .slide .frame { position: relative; aspect-ratio: 16 / 10; max-height: 74vh; background: #e8e5df center / cover no-repeat; overflow: hidden; box-shadow: 0 10px 40px #1a1a1a1f; }
+    .slide .frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+    .tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; }
+    .tags span { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: #1a1a1a0f; border: 1px solid #1a1a1a1a; color: #3a3935; }
+    .deck-link { display: inline-block; margin-top: 10px; padding: 11px 18px; border-radius: 999px; background: #1a1a1a; color: #f4f2ee; text-decoration: none; font-size: 15px; }
+    .deck-link:hover { background: #e1312b; }
+    @media (max-width: 720px) { #dock { gap: 10px; padding: 8px 10px 10px; } .gear-gate { grid-template-columns: repeat(4, 48px); } .gear-knob { width: 48px; }
+      .gear-gate[data-at="1"] .gear-knob { transform: translateX(48px); } .gear-gate[data-at="2"] .gear-knob { transform: translateX(96px); } .gear-gate[data-at="3"] .gear-knob { transform: translateX(144px); }
+      .gear-slot small, .pedal small { display: none; } .pedal { width: 44px; } }
   </style>
 </head>
 <body>
+  <nav id="dock" aria-label="Portfolio"></nav>
   <div id="loader"><span id="pct">Loading</span><div class="bar"><div class="fill" id="fill"></div></div></div>
   <button id="sound" type="button">Sound on</button>
   <button id="replay" title="Replay (R)">Replay</button>

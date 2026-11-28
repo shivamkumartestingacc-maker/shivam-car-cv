@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { loadCar } from './car.js';
 import { createBillboards } from './billboards.js';
-import { caseStudies } from './content.js';
-import { loadDeck, openDeck } from './deck.js';
+import { caseStudies, motion, visuals, ai, gears, contacts } from './content.js';
+import { loadDeck, openDeck, itemDeck } from './deck.js';
 import { createSky, createTrees, createPetals, createBenches, createSkyline } from './scenery.js';
 import { createEngineSound } from './sound.js';
 
@@ -69,9 +69,25 @@ const edges = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.12, EDGE), paint
 dashes.frustumCulled = edges.frustumCulled = false;
 scene.add(dashes, edges);
 const sky = createSky(scene), trees = createTrees(scene), petals = createPetals(scene), benches = createBenches(scene), skyline = createSkyline(scene);
-let boards = null, decks = [];
+// Gear = what the road shows. Case studies go on the bridges; motion / visuals / AI on roadside boards.
+const bridges = createBillboards(scene, 'bridge'), sideBoards = createBillboards(scene, 'side');
+const LABEL = { motion: 'Motion', visuals: 'Visual', ai: 'AI exploration' };
+const SETS = { motion, visuals, ai };
+let gear = 'case', decks = [];
 const decksReady = Promise.all(caseStudies.map((id) => loadDeck(id).catch((e) => console.warn(e))))
-  .then((list) => { decks = list.filter(Boolean); boards = createBillboards(scene, decks); });
+  .then((list) => {
+    decks = list.filter(Boolean);
+    bridges.setItems(decks.map((d, i) => ({ id: d.id, title: d.title, thumb: d.thumb, label: `Case study ${String(i + 1).padStart(2, '0')}` })));
+  });
+function setGear(id) {
+  gear = id;
+  bridges.visible = id === 'case';
+  sideBoards.visible = id !== 'case';
+  if (id !== 'case') sideBoards.setItems(SETS[id].map((it) => ({ ...it, label: LABEL[id] })));
+  for (const b of document.querySelectorAll('.gear-slot')) b.setAttribute('aria-pressed', String(b.dataset.gear === id));
+  document.querySelector('.gear-gate').dataset.at = gears.findIndex((g) => g.id === id);
+}
+const activeBoards = () => (gear === 'case' ? bridges : sideBoards);
 
 const m = new THREE.Matrix4(), q = new THREE.Quaternion(), flat = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
 const one = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
@@ -116,7 +132,7 @@ function pose(t, carZ) {
   sun.position.set(-6, 12, carZ + 4);
   sun.target.position.set(0, 0, carZ);
   layoutRoad(carZ);
-  boards?.update(carZ);
+  activeBoards().update(carZ);
   trees.update(carZ);
   benches.update(carZ);
   skyline.update(carZ);
@@ -155,6 +171,8 @@ let deckOpen = false;
 addEventListener('keydown', (e) => {
   const k = keyOf(e);
   if (k === 'r' && !deckOpen) return replay();
+  const g = gears.find((x) => x.key === k);
+  if (g && !deckOpen) return setGear(g.id);
   if (FWD.includes(k) || BACK.includes(k)) { held.add(k); drive.stopped = false; }
   else if (k === ' ') drive.stopped = true;
   else return;
@@ -193,7 +211,7 @@ const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 const boardAt = (e) => {
   ndc.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
-  return ray.intersectObjects(boards?.panels ?? [])[0]?.object.userData.id;
+  return ray.intersectObjects(activeBoards().panels)[0]?.object.userData.id;
 };
 renderer.domElement.addEventListener('pointermove', (e) => { renderer.domElement.style.cursor = boardAt(e) ? 'pointer' : ''; });
 // Screen rectangle of a billboard panel (its projected bounding box), for the open/close transition.
@@ -210,12 +228,28 @@ function screenRect(panel) {
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }
 renderer.domElement.addEventListener('click', (e) => {
-  const id = boardAt(e), deck = decks.find((d) => d.id === id);
+  const id = boardAt(e);
+  const item = gear === 'case' ? null : SETS[gear].find((x) => x.id === id);
+  const deck = gear === 'case' ? decks.find((d) => d.id === id) : item && itemDeck(item, LABEL[gear]);
   if (!deck || deckOpen) return;
-  const panel = boards.panels.find((p) => p.userData.id === id && ray.intersectObject(p).length);
+  const panel = activeBoards().panels.find((p) => p.userData.id === id && ray.intersectObject(p).length);
   deckOpen = true;
   openDeck(deck, () => { deckOpen = false; }, () => screenRect(panel)); // the car brakes to a stop behind the deck
 });
+
+// ---- Dock: gear selector (left), contact pedals (right) ----
+const dockEl = document.getElementById('dock');
+let lift = 0;
+dockEl.innerHTML = `
+  <div class="gearbox"><span class="dock-cap">Gear</span>
+    <div class="gear-gate" data-at="0"><span class="gear-knob" aria-hidden="true"></span>
+      ${gears.map((g) => `<button type="button" class="gear-slot" data-gear="${g.id}" aria-pressed="false" title="${g.label} (${g.key})"><b>${g.short}</b><small>${g.label}</small></button>`).join('')}
+    </div></div>
+  <span class="dock-sep" aria-hidden="true"></span>
+  <div class="pedals"><span class="dock-cap">Contact</span>
+    <div class="pedal-row">${contacts.map((c) => `<a class="pedal" href="${c.href}" target="_blank" rel="noopener"><i aria-hidden="true"></i><b>${c.label}</b><small>${c.pedal}</small></a>`).join('')}</div></div>`;
+dockEl.addEventListener('click', (e) => { const b = e.target.closest('.gear-slot'); if (b) setGear(b.dataset.gear); });
+setGear('case');
 
 pose(0, 0);
 renderer.setAnimationLoop((now) => {
@@ -226,6 +260,11 @@ renderer.setAnimationLoop((now) => {
     else driveStep(dt);
   }
   if (debug && playing) scrub.value = t / CFG.duration;
+  const dockOn = t >= CFG.duration && !deckOpen;
+  dockEl.classList.toggle('on', dockOn);
+  // lens shift: once the dock shows, the frame slides up so the car sits clear of it
+  lift += ((dockOn ? dockEl.offsetHeight + 24 : 0) - lift) * Math.min(1, dt * 3);
+  camera.setViewOffset(innerWidth, innerHeight, 0, lift, innerWidth, innerHeight);
   pose(t, CFG.speed * t + drive.z);
   petals.update(dt, CFG.speed * t + drive.z);
   engine.update(t < CFG.duration ? CFG.speed : drive.v, CFG.drive.max);
@@ -237,7 +276,7 @@ Promise.all([loaded, decksReady]).then(() => { renderer.compile(scene, camera); 
 window.__intro = { CFG, get t() { return t; }, get v() { return drive.v; },
   boardScreen() { // debug/test helper: screen position of the nearest billboard ahead
     const v = new THREE.Vector3();
-    const byZ = (boards?.panels ?? []).map((p) => [p, p.getWorldPosition(new THREE.Vector3()).z]).sort((a, b) => a[1] - b[1]);
+    const byZ = activeBoards().panels.map((p) => [p, p.getWorldPosition(new THREE.Vector3()).z]).sort((a, b) => a[1] - b[1]);
     for (const [p] of byZ) {
       p.getWorldPosition(v);
       if (v.z < camera.position.z + 5) continue;
