@@ -1,5 +1,5 @@
 title: Making UPI rewards worth earning
-thumb: ../../media/case/paytm.webp
+thumb: ../../media/case/paytm.jpg
 ---
 # Making UPI rewards worth earning
 ## Paytm · self-initiated concept

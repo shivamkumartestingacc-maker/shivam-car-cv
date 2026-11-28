@@ -1,5 +1,5 @@
 title: The footer nobody designed
-thumb: ../../media/case/footer.webp
+thumb: ../../media/case/footer.jpg
 ---
 # The footer nobody designed
 ## Footer games · self-initiated

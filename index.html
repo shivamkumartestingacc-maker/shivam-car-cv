@@ -50,34 +50,34 @@
     .deck-link:hover { background: #e1312b; }
 
     /* ---- Dock: faded street map with section places + a travelling location pin; contact stamps at the end ---- */
-    #dock { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); z-index: 5; width: min(980px, calc(100vw - 24px)); height: 124px; display: flex; align-items: center;
-      border-radius: 44px; background: #fbfaf7; box-shadow: 0 10px 40px #1a1a1a24, 0 0 0 1px #1a1a1a0f; overflow: visible;
+    #dock { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); z-index: 5; width: min(780px, calc(100vw - 24px)); height: 92px; display: flex; align-items: center;
+      border-radius: 34px; background: #fbfaf7; box-shadow: 0 10px 40px #1a1a1a24, 0 0 0 1px #1a1a1a0f; overflow: visible;
       opacity: 0; transform: translate(-50%, 20px); pointer-events: none; transition: opacity .5s, transform .6s cubic-bezier(.2,.8,.2,1); }
     #dock.on { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
-    .dock-map { position: relative; flex: 1; height: 100%; border-radius: 44px 0 0 44px; }
-    .streets { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 44px 0 0 44px;
+    .dock-map { position: relative; flex: 1; height: 100%; border-radius: 34px 0 0 34px; }
+    .streets { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 34px 0 0 34px;
       -webkit-mask: radial-gradient(120% 140% at 45% 50%, #000 55%, transparent 100%); mask: radial-gradient(120% 140% at 45% 50%, #000 55%, transparent 100%); opacity: .9; }
     .place { position: absolute; top: 58%; transform: translate(-50%, -50%); display: grid; justify-items: center; gap: 4px; background: none; border: 0; padding: 6px; cursor: pointer; font: inherit; }
     .place i { width: 11px; height: 11px; border-radius: 50%; background: #fff; border: 2.5px solid #3c8ef0; box-shadow: 0 1px 3px #0003; }
-    .place span { font-size: 12px; font-weight: 600; color: #6d6a64; white-space: nowrap; text-shadow: 0 0 4px #fff, 0 0 4px #fff; }
+    .place span { font-size: 11px; font-weight: 600; color: #6d6a64; white-space: nowrap; text-shadow: 0 0 4px #fff, 0 0 4px #fff; }
     .place:hover i { transform: scale(1.25); } .place[aria-pressed="true"] { visibility: hidden; }
     .place:focus-visible { outline: 2px solid #3c8ef0; border-radius: 8px; }
-    .pin { position: absolute; top: -22px; transform: translateX(-50%); display: grid; justify-items: center; pointer-events: none; transition: left .7s cubic-bezier(.5,1.3,.4,1); }
-    .pin-head { position: relative; width: 74px; height: 74px; border-radius: 50%; background: #fff; box-shadow: 0 6px 16px #1a1a1a30; display: grid; place-items: center; }
-    .pin-head::after { content: ""; position: absolute; left: 50%; bottom: -9px; width: 18px; height: 18px; background: #fff; transform: translateX(-50%) rotate(45deg); border-radius: 0 0 4px 0; box-shadow: 4px 4px 6px #1a1a1a14; } /* the pin's point */
-    .pin-head::before { content: ""; position: absolute; inset: 7px; border-radius: 50%; background: linear-gradient(#6db3ff, #2f7fe8); z-index: 1; }
-    .pin-head svg { position: relative; z-index: 2; width: 30px; height: 30px; color: #fff; }
-    .pin-label { margin-top: 12px; font-size: 22px; font-weight: 700; color: #5d5a55; letter-spacing: -.01em; white-space: nowrap; text-shadow: 0 0 6px #fff, 0 0 6px #fff; }
+    .pin { position: absolute; top: -18px; transform: translateX(-50%); display: grid; justify-items: center; pointer-events: none; transition: left .7s cubic-bezier(.5,1.3,.4,1); }
+    .pin-head { position: relative; width: 54px; height: 54px; border-radius: 50%; background: #fff; box-shadow: 0 6px 16px #1a1a1a30; display: grid; place-items: center; }
+    .pin-head::after { content: ""; position: absolute; left: 50%; bottom: -7px; width: 14px; height: 14px; background: #fff; transform: translateX(-50%) rotate(45deg); border-radius: 0 0 4px 0; box-shadow: 4px 4px 6px #1a1a1a14; } /* the pin's point */
+    .pin-head::before { content: ""; position: absolute; inset: 5px; border-radius: 50%; background: linear-gradient(#6db3ff, #2f7fe8); z-index: 1; }
+    .pin-head svg { position: relative; z-index: 2; width: 22px; height: 22px; color: #fff; }
+    .pin-label { margin-top: 8px; font-size: 16px; font-weight: 700; color: #5d5a55; letter-spacing: -.01em; white-space: nowrap; text-shadow: 0 0 6px #fff, 0 0 6px #fff; }
     .pin.drop .pin-head { animation: pin-drop .55s cubic-bezier(.3,1.5,.5,1); }
     @keyframes pin-drop { 0% { transform: translateY(-14px) scale(.9); } 100% { transform: none; } }
-    .stamps { display: flex; gap: 10px; align-items: center; padding: 0 26px 0 16px; height: 100%; border-left: 1px dashed #1a1a1a1f; }
+    .stamps { display: flex; gap: 8px; align-items: center; padding: 0 20px 0 12px; height: 100%; border-left: 1px dashed #1a1a1a1f; }
     /* postage stamp: perforated edge = paper-coloured dots punched round a coloured face */
     .stamp { display: block; padding: 5px; text-decoration: none; transform: rotate(var(--r)); transition: transform .25s cubic-bezier(.2,.8,.2,1);
       background: radial-gradient(circle, transparent 2.6px, #fbf8f1 2.9px) -4px -4px / 8px 8px; filter: drop-shadow(0 3px 5px #1a1a1a2e); }
     .stamp:hover, .stamp:focus-visible { transform: rotate(0deg) translateY(-6px) scale(1.06); outline: none; }
-    .stamp-face { display: grid; place-items: center; width: 58px; height: 70px; background: var(--c); color: #fbf8f1; outline: 1.5px solid #fbf8f1aa; outline-offset: -5px; }
-    .stamp-face b { font: 700 24px/1 system-ui, sans-serif; margin-top: 6px; }
-    .stamp-face small { font-size: 7.5px; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; }
+    .stamp-face { display: grid; place-items: center; width: 44px; height: 54px; background: var(--c); color: #fbf8f1; outline: 1.5px solid #fbf8f1aa; outline-offset: -5px; }
+    .stamp-face b { font: 700 18px/1 system-ui, sans-serif; margin-top: 5px; }
+    .stamp-face small { font-size: 6.5px; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; }
 
     /* ---- Lightbox: work enlarges out of its billboard ---- */
     .lightbox { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; align-content: center; gap: 16px; padding: 24px; background: rgba(244,242,238,0); backdrop-filter: blur(0); transition: background .45s, backdrop-filter .45s; cursor: zoom-out; }
@@ -92,7 +92,7 @@
     .lb-open { padding: 7px 14px; border-radius: 999px; background: #1a1a1a; color: #f4f2ee; text-decoration: none; font-size: 13px; cursor: pointer; }
     .lb-open:hover { background: #e1312b; }
     .lb-close { position: fixed; top: 18px; right: 18px; width: 40px; height: 40px; border-radius: 50%; border: 1px solid #1a1a1a33; background: #fbf8f1; font-size: 22px; line-height: 1; cursor: pointer; }
-    @media (max-width: 720px) { #dock { height: 104px; border-radius: 32px; } .dock-map, .streets { border-radius: 32px 0 0 32px; } .stamp-face { width: 38px; height: 46px; } .stamp-face b { font-size: 17px; } .stamp-face small { display: none; } .stamps { gap: 5px; padding: 0 14px 0 10px; } .place span { display: none; } .pin-head { width: 56px; height: 56px; } .pin-head svg { width: 24px; height: 24px; } .pin-label { display: none; } }
+    @media (max-width: 720px) { #dock { height: 84px; border-radius: 28px; } .dock-map, .streets { border-radius: 28px 0 0 28px; } .stamp-face { width: 38px; height: 46px; } .stamp-face b { font-size: 17px; } .stamp-face small { display: none; } .stamps { gap: 5px; padding: 0 14px 0 10px; } .place span { display: none; } .pin-head { width: 46px; height: 46px; } .pin-head svg { width: 20px; height: 20px; } .pin-label { display: none; } }
     @media (prefers-reduced-motion: reduce) { .lb-media, .lightbox, .stamp, .pin { transition: none; animation: none; } }
   </style>
 </head>
