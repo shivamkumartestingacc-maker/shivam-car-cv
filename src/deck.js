@@ -13,9 +13,10 @@ function parseSlide(block, url) {
   const flush = () => { if (para.length) parts.push({ t: 'p', text: para.join(' ') }); para = []; };
   for (const raw of block.split('\n')) {
     const line = raw.trim();
-    const media = line.match(/^!\[(.*?)\]\((.+?)\)$/);
+    const media = line.match(/^!\[(.*?)\]\((.+?)\)$/), link = line.match(/^\[(.+?)\]\((.+?)\)$/);
     if (!line) flush();
     else if (media) { flush(); parts.push({ t: 'media', alt: media[1], src: url(media[2]) }); }
+    else if (link) { flush(); parts.push({ t: 'a', text: link[1], href: url(link[2]) }); }
     else if (line.startsWith('## ')) { flush(); parts.push({ t: 'h3', text: line.slice(3) }); }
     else if (line.startsWith('# ')) { flush(); parts.push({ t: 'h2', text: line.slice(2) }); }
     else if (/^[-*] /.test(line)) { flush(); parts.push({ t: 'li', text: line.slice(2) }); }
@@ -63,6 +64,10 @@ function renderSlide(parts) {
       continue;
     }
     list = null;
+    if (p.t === 'a') {
+      copy.append(Object.assign(document.createElement('a'), { textContent: `${p.text} ↗`, href: p.href, target: '_blank', rel: 'noopener', className: 'deck-link' }));
+      continue;
+    }
     copy.append(Object.assign(document.createElement(p.t), { textContent: p.text }));
   }
   slide.prepend(copy);
